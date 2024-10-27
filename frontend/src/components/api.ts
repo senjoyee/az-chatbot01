@@ -134,3 +134,38 @@ export const getDocumentContent = async (filename: string) => {
     throw error;
   }
 };
+
+// Add conversation API function
+export const sendMessage = async (
+  question: string,
+  conversation: Message[]
+) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/conversation`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: question,
+        conversation: {
+          conversation: conversation.map(msg => ({
+            role: msg.sender === 'user' ? 'user' : 'assistant',
+            content: msg.text
+          }))
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Error: ${response.status} - ${errorText}`);
+    }
+
+    const data = await response.json();
+    return data.answer;
+  } catch (error) {
+    console.error('Message error:', error);
+    throw error;
+  }
+};

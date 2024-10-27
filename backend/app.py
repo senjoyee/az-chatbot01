@@ -12,12 +12,14 @@ from langchain.indexes import SQLRecordManager, index
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.schema import Document, StrOutputParser, format_document
 from langchain.schema.runnable import RunnableParallel, RunnablePassthrough
+from langchain_community.document_loaders import Docx2txtLoader
 from langchain_postgres import PGVector
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine
 from sqlalchemy.sql import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
+from typing import Optional
 
 load_dotenv(find_dotenv())
 
@@ -52,12 +54,17 @@ retriever = vector_store.as_retriever()
 
 
 class Message(BaseModel):
-    role: str
-    content: str
+  role: str  # 'user' or 'bot'
+  content: str
+  id: Optional[int] = None
 
 
 class Conversation(BaseModel):
     conversation: list[Message]
+
+class ConversationRequest(BaseModel):
+  question: str
+  conversation: Conversation
 
 
 class DocumentIn(BaseModel):
@@ -72,7 +79,10 @@ def _format_chat_history(conversation: list[Message]) -> str:
     return formatted_history.rstrip()
 
 
-llm = AzureChatOpenAI(deployment="gpt-4o-mini", temperature=0)
+llm = AzureChatOpenAI(
+    azure_deployment="gpt-4o-mini",
+    api_version="2023-03-15-preview",
+    temperature=0)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
@@ -150,12 +160,30 @@ async def row_count():
 
 
 @app.post("/conversation")
-async def ask_question(question: str, conversation: Conversation) -> dict:
-    logger.info(f"Received request from: {request.client.host}")
-    answer = conversational_qa_chain.invoke(
-        {"question": question, "chat_history": conversation.conversation}
-    )
-    return {"answer": answer}
+async def ask_question(request: ConversationRequest) -> dict:
+  try:
+      question = request.question
+      conversation = request.conversation
+
+      # Format conversation history
+      chat_history = [
+          {"role": msg.role, "content": msg.content}
+          for msg in conversation.conversation
+          if msg.role in ['user', 'assistant']
+      ]
+      
+      answer = conversational_qa_chain.invoke({
+          "question": question,
+          "chat_history": chat_history
+      })
+      
+      return {
+          "answer": answer,
+          "status": "success"
+      }
+  except Exception as e:
+      logger.error(f"Conversation error: {str(e)}")
+      raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/listfiles")

@@ -12,5 +12,6 @@ python-multipart
 psycopg2-binary
 azure-storage-blob
 azure-functions
+docx2txt
 
 

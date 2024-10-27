@@ -5,19 +5,22 @@ import { Send } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface Message {
   id: number
   text: string
-  sender: 'user' | 'bot'
+  sender: 'user' | 'assistant'
 }
 
-export default function Component() {
+export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, text: "Hello! How can I assist you today?", sender: 'bot' }
   ])
   const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -27,47 +30,93 @@ export default function Component() {
   }, [messages])
 
   const handleSend = async () => {
-    if (input.trim()) {
-      const newMessage = { id: messages.length + 1, text: input, sender: 'user' };
-      setMessages([...messages, newMessage]);
-      setInput('');
-    
-      try {
-        // Update the fetch URL to use the proxy
-        const response = await fetch('https://jscb-proxy-nginx.azurewebsites.net/api/conversation', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            question: input,
-            conversation: messages,
-          }),
-        });
-        const data = await response.json();
-        const botResponse = { id: messages.length + 2, text: data.answer, sender: 'bot' };
-        setMessages(prevMessages => [...prevMessages, botResponse]);
-      } catch (error) {
-        console.error('Error:', error);
-      }
+    if (!input.trim() || loading) return
+  
+    const userMessage = { 
+      id: messages.length + 1, 
+      text: input.trim(), 
+      sender: 'user' 
     }
-  };
+  
+    setMessages(prev => [...prev, userMessage])
+    setInput('')
+    setLoading(true)
+    setError(null)
+  
+    try {
+      // Format conversation history to match backend expectations
+      const conversationHistory = messages.map(msg => ({
+        role: msg.sender,  // 'user' or 'assistant'
+        content: msg.text
+      }))
+  
+      const response = await fetch('https://jscb-proxy-nginx.azurewebsites.net/api/conversation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          question: userMessage.text,
+          conversation: {
+            conversation: conversationHistory
+          }
+        }),
+      })
+  
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Error: ${response.status} - ${errorText}`);
+      }
+  
+      const data = await response.json()
+  
+      if (!data.answer) {
+        throw new Error('Invalid response format')
+      }
+  
+      const botResponse = { 
+        id: messages.length + 2, 
+        text: data.answer, 
+        sender: 'assistant' 
+      }
+      
+      setMessages(prev => [...prev, botResponse])
+    } catch (error) {
+      console.error('Chat error:', error)
+      setError(error instanceof Error ? error.message : 'Failed to send message')
+      // Optionally, remove the user message if the request failed
+      // setMessages(prev => prev.slice(0, -1))
+    } finally {
+      setLoading(false)
+    }
+  }
 
   return (
     <div className="flex h-screen items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 p-4">
       <div className="relative w-full max-w-4xl rounded-lg bg-white shadow-2xl overflow-hidden">
         {/* Background Logo */}
         <div className="absolute inset-0 flex items-center justify-center opacity-5">
-          <img src="/SoftwareOne_Logo_Lrg_RGB_Blk.svg" alt="SoftwareOne Logo" className="max-w-full max-h-full" />
+          <img 
+            src="/SoftwareOne_Logo_Lrg_RGB_Blk.svg" 
+            alt="SoftwareOne Logo" 
+            className="max-w-full max-h-full" 
+          />
         </div>
-        
+
         {/* Chat Interface */}
         <div className="flex flex-col h-[80vh] relative z-10">
           {/* Chat Header */}
           <div className="bg-primary text-primary-foreground p-6">
             <h2 className="text-2xl font-semibold">Document Assistant</h2>
           </div>
-          
+
+          {/* Error Display */}
+          {error && (
+            <Alert variant="destructive" className="m-4">
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          )}
+
           {/* Messages Area */}
           <ScrollArea className="flex-grow p-6" ref={scrollAreaRef}>
             {messages.map((message) => (
@@ -98,8 +147,13 @@ export default function Component() {
                 )}
               </div>
             ))}
+            {loading && (
+              <div className="flex items-center space-x-2 text-gray-500">
+                <div className="animate-pulse">Thinking...</div>
+              </div>
+            )}
           </ScrollArea>
-          
+
           {/* Input Area */}
           <div className="border-t p-6 bg-gray-50">
             <div className="flex items-center space-x-4">
@@ -109,9 +163,15 @@ export default function Component() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+                disabled={loading}
                 className="flex-grow text-base rounded-full"
               />
-              <Button onClick={handleSend} size="icon" className="rounded-full">
+              <Button 
+                onClick={handleSend} 
+                size="icon" 
+                className="rounded-full"
+                disabled={loading || !input.trim()}
+              >
                 <Send className="h-5 w-5" />
                 <span className="sr-only">Send</span>
               </Button>
