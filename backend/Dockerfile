@@ -13,9 +13,11 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Install PostgreSQL client
 RUN apt-get update && apt-get install -y postgresql-client && rm -rf /var/lib/apt/lists/*
 
-# Copy wait-for-postgres.sh into the container and make it executable
+# Copy wait-for-postgres.sh into the container, fix line endings, and make it executable
 COPY ./wait-for-postgres.sh /wait-for-postgres.sh
-RUN chmod +x /wait-for-postgres.sh
+# Fix Windows line endings (CRLF -> LF)
+RUN sed -i 's/\r$//' /wait-for-postgres.sh && \
+    chmod +x /wait-for-postgres.sh
 
 # Make port 5000 available to the world outside this container
 EXPOSE 5000
