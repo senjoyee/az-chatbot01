@@ -1,0 +1,36 @@
+docker build -t jssapmscr.azurecr.io/backend:latest ./backend
+docker build -t jssapmscr.azurecr.io/frontend:latest ./frontend
+docker build -t jssapmscr.azurecr.io/proxy:latest ./proxy
+
+az acr login --name jssapmscr
+
+docker push jssapmscr.azurecr.io/backend:latest
+docker push jssapmscr.azurecr.io/frontend:latest
+docker push jssapmscr.azurecr.io/proxy:latest
+
+az acr repository list --name jssapmscr --output table
+
+az login
+
+az webapp list --query "[].{name:name, resourceGroup:resourceGroup}" -o table
+
+az webapp stop --name jscbbackend01 --resource-group js-sapservices-tools
+az webapp stop --name documentchatbot01 --resource-group js-sapservices-tools
+az webapp stop --name jscb-proxy-nginx --resource-group js-sapservices-tools
+
+az webapp start --name jscbbackend01 --resource-group js-sapservices-tools
+az webapp start --name documentchatbot01 --resource-group js-sapservices-tools
+az webapp start --name jscb-proxy-nginx --resource-group js-sapservices-tools
+
+az webapp restart --name jscbbackend01 --resource-group js-sapservices-tools
+az webapp restart --name documentchatbot01 --resource-group js-sapservices-tools
+az webapp restart --name jscb-proxy-nginx --resource-group js-sapservices-tools
+
+
+az postgres flexible-server list --query "[].{name:name, resourceGroup:resourceGroup}" -o table
+
+az postgres flexible-server stop --resource-group js-sapservices-tools --name sapmscbpgdb
+az postgres flexible-server start --resource-group js-sapservices-tools --name sapmscbpgdb
+
+
+func azure functionapp publish js-sap-func
