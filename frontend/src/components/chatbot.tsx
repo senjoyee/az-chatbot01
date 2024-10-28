@@ -16,7 +16,7 @@ interface Message {
 
 export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
-    { id: 1, text: "Hello! How can I assist you today?", sender: 'bot' }
+    { id: 1, text: "Hello! How can I assist you today?", sender: 'assistant' }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
@@ -46,11 +46,11 @@ export default function Chatbot() {
     try {
       // Format conversation history to match backend expectations
       const conversationHistory = messages.map(msg => ({
-        role: msg.sender,  // 'user' or 'assistant'
+        role: msg.sender === 'user' ? 'user' : 'assistant',  // Map 'bot' to 'assistant'
         content: msg.text
       }))
   
-      const response = await fetch('https://jscb-proxy-nginx.azurewebsites.net/api/conversation', {
+      const response = await fetch('https://jscbbackend01.azurewebsites.net/conversation', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

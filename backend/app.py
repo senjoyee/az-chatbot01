@@ -94,7 +94,7 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_question_templa
 answer_template = """Answer the question based only on the following context:
 {context}
 
-If you don´t find the answer in the context, tell the user that you are happy to help with different questions about La Tavola Calda
+If you don´t find the answer in the context, tell the user that you don't know
 
 Question: {question}
 """
@@ -128,13 +128,15 @@ _context = {
 conversational_qa_chain = _inputs | _context | ANSWER_PROMPT | llm | StrOutputParser()
 
 app = FastAPI()
-#app.add_middleware(
-#   CORSMiddleware,
-#    allow_origins=["*"],
-#    allow_credentials=True,
-#    allow_methods=["*"],
-#    allow_headers=["*"],
-#)
+
+app.add_middleware(
+  CORSMiddleware,
+  allow_origins=["https://documentchatbot01.azurewebsites.net"],  # Frontend URL
+  allow_credentials=True,
+  allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+  allow_headers=["*"],
+  expose_headers=["*"],
+)
 
 
 @app.get("/test")
@@ -164,13 +166,19 @@ async def ask_question(request: ConversationRequest) -> dict:
   try:
       question = request.question
       conversation = request.conversation
+      
+      # Add debug logging
+      logger.info(f"Received question: {question}")
+      logger.info(f"Received conversation: {conversation}")
 
-      # Format conversation history
       chat_history = [
           {"role": msg.role, "content": msg.content}
           for msg in conversation.conversation
           if msg.role in ['user', 'assistant']
       ]
+      
+      # Add debug logging
+      logger.info(f"Formatted chat history: {chat_history}")
       
       answer = conversational_qa_chain.invoke({
           "question": question,

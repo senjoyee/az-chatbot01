@@ -1,6 +1,15 @@
 // api.ts
 
-const API_BASE_URL = 'https://jscb-proxy-nginx.azurewebsites.net/api';
+const API_BASE_URL = 'https://jscbbackend01.azurewebsites.net';
+
+// Error handling utility
+const handleApiError = (error: any, operation: string) => {
+  if (error instanceof TypeError && error.message === 'Failed to fetch') {
+    console.error(`CORS or network error during ${operation}:`, error);
+    throw new Error(`Network error: Please check your connection or CORS configuration`);
+  }
+  throw error;
+};
 
 export const uploadFiles = async (files: File[]) => {
   // Add file size validation
@@ -29,7 +38,7 @@ export const uploadFiles = async (files: File[]) => {
     const response = await fetch(`${API_BASE_URL}/uploadfiles`, {
       method: 'POST',
       body: formData,
-      // Add timeout
+      credentials: 'include',
       signal: AbortSignal.timeout(5 * 60 * 1000), // 5 minutes timeout
     });
     
@@ -41,7 +50,7 @@ export const uploadFiles = async (files: File[]) => {
     
     return response.json();
   } catch (error) {
-    console.error('Upload error:', error);
+    handleApiError(error, 'file upload');
     throw error;
   }
 };
@@ -51,6 +60,7 @@ export const deleteFile = async (filename: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/deletefile/${encodeURIComponent(filename)}`, {
       method: 'DELETE',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -68,7 +78,7 @@ export const deleteFile = async (filename: string) => {
     console.log('Delete response data:', data);
     return data;
   } catch (error) {
-    console.error('Delete error:', error);
+    handleApiError(error, 'file deletion');
     throw error;
   }
 };
@@ -77,7 +87,12 @@ export const listFiles = async (page: number = 1, pageSize: number = 10) => {
   console.log('Attempting to fetch files from:', `${API_BASE_URL}/listfiles?page=${page}&page_size=${pageSize}`);
   
   try {
-    const response = await fetch(`${API_BASE_URL}/listfiles?page=${page}&page_size=${pageSize}`);
+    const response = await fetch(
+      `${API_BASE_URL}/listfiles?page=${page}&page_size=${pageSize}`,
+      {
+        credentials: 'include',
+      }
+    );
     console.log('Raw response:', response);
     
     if (!response.ok) {
@@ -90,17 +105,16 @@ export const listFiles = async (page: number = 1, pageSize: number = 10) => {
     console.log('Parsed response data:', data);
     return data;
   } catch (error) {
-    console.error('List files error:', error);
+    handleApiError(error, 'file listing');
     throw error;
   }
 };
-
-// You can add more API functions here as needed
 
 export const searchDocuments = async (query: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/search?query=${encodeURIComponent(query)}`, {
       method: 'GET',
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -111,7 +125,7 @@ export const searchDocuments = async (query: string) => {
     
     return response.json();
   } catch (error) {
-    console.error('Search error:', error);
+    handleApiError(error, 'document search');
     throw error;
   }
 };
@@ -120,6 +134,7 @@ export const getDocumentContent = async (filename: string) => {
   try {
     const response = await fetch(`${API_BASE_URL}/document/${encodeURIComponent(filename)}`, {
       method: 'GET',
+      credentials: 'include',
     });
     
     if (!response.ok) {
@@ -130,12 +145,11 @@ export const getDocumentContent = async (filename: string) => {
     
     return response.text();
   } catch (error) {
-    console.error('Get document content error:', error);
+    handleApiError(error, 'document content retrieval');
     throw error;
   }
 };
 
-// Add conversation API function
 export const sendMessage = async (
   question: string,
   conversation: Message[]
@@ -143,6 +157,7 @@ export const sendMessage = async (
   try {
     const response = await fetch(`${API_BASE_URL}/conversation`, {
       method: 'POST',
+      credentials: 'include',
       headers: {
         'Content-Type': 'application/json',
       },
@@ -165,7 +180,7 @@ export const sendMessage = async (
     const data = await response.json();
     return data.answer;
   } catch (error) {
-    console.error('Message error:', error);
+    handleApiError(error, 'message sending');
     throw error;
   }
 };
