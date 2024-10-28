@@ -133,7 +133,7 @@ app.add_middleware(
   CORSMiddleware,
   allow_origins=["https://documentchatbot01.azurewebsites.net"],  # Frontend URL
   allow_credentials=True,
-  allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
+  allow_methods=["*"],
   allow_headers=["*"],
   expose_headers=["*"],
 )
@@ -167,18 +167,14 @@ async def ask_question(request: ConversationRequest) -> dict:
       question = request.question
       conversation = request.conversation
       
-      # Add debug logging
+      # Debug logging
       logger.info(f"Received question: {question}")
       logger.info(f"Received conversation: {conversation}")
 
-      chat_history = [
-          {"role": msg.role, "content": msg.content}
-          for msg in conversation.conversation
-          if msg.role in ['user', 'assistant']
-      ]
+      # Use the messages directly without transformation
+      chat_history = conversation.conversation
       
-      # Add debug logging
-      logger.info(f"Formatted chat history: {chat_history}")
+      logger.info(f"Using chat history: {chat_history}")
       
       answer = conversational_qa_chain.invoke({
           "question": question,

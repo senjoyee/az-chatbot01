@@ -46,9 +46,10 @@ export default function Chatbot() {
     try {
       // Format conversation history to match backend expectations
       const conversationHistory = messages.map(msg => ({
-        role: msg.sender === 'user' ? 'user' : 'assistant',  // Map 'bot' to 'assistant'
-        content: msg.text
-      }))
+        role: msg.sender,  // Map 'bot' to 'assistant'
+        content: msg.text,
+        id: msg.id
+      }));
   
       const response = await fetch('https://jscbbackend01.azurewebsites.net/conversation', {
         method: 'POST',
@@ -58,7 +59,11 @@ export default function Chatbot() {
         body: JSON.stringify({
           question: userMessage.text,
           conversation: {
-            conversation: conversationHistory
+            conversation: messages.map(msg => ({
+              role: msg.sender,  // Keep as 'user' or 'assistant'
+              content: msg.text,
+              id: msg.id
+            }))
           }
         }),
       })
