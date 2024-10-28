@@ -8,3 +8,5 @@ azure-storage-blob
 langchain
 unstructured
 langchain-community
+langchain-openai
+docx2txt
