@@ -50,7 +50,7 @@ vector_store = PGVector(
     connection=CONNECTION_STRING,
     use_jsonb=True,
 )
-retriever = vector_store.as_retriever()
+retriever = vector_store.as_retriever(search_kwargs={"k": 20})
 
 
 class Message(BaseModel):
@@ -91,12 +91,38 @@ Follow Up Input: {question}
 Standalone question:"""
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_question_template)
 
-answer_template = """Answer the question based only on the following context:
+answer_template = """Please provide an answer based strictly on the following context:
+<context>
 {context}
+</context>
 
-If you don´t find the answer in the context, tell the user that you don't know
+Guidelines for answering:
+1. I will analyze the question and context thoroughly
+2. Present information in a clear, structured format
+3. Use numbered points for main ideas
+4. Include sub-points (a, b, c) where needed for additional detail
+5. Ensure all points are supported by the context
+6. Clearly indicate if information is incomplete
+7. Maintain consistency throughout the response
 
 Question: {question}
+
+Answer:
+[If sufficient information exists in context]
+1. [First main point]
+ a. [Supporting detail]
+ b. [Supporting detail]
+2. [Second main point]
+ a. [Supporting detail]
+ etc.
+
+[If information is incomplete or missing]
+Based on the provided context, I cannot fully answer this question. However, here is the relevant information that is available:
+1. [Available information point]
+2. [Available information point]
+
+[If no relevant information exists]
+The provided context does not contain information to answer this question.
 """
 ANSWER_PROMPT = ChatPromptTemplate.from_template(answer_template)
 
