@@ -100,7 +100,7 @@ Guidelines for answering:
 1. I will analyze the question and context thoroughly
 2. Present information in a clear, structured format
 3. Use numbered points for main ideas
-4. Include sub-points (a, b, c) where needed for additional detail
+4. Use dashes (-) for sub-points instead of letters
 5. Ensure all points are supported by the context
 6. Clearly indicate if information is incomplete
 7. Maintain consistency throughout the response
@@ -110,16 +110,18 @@ Question: {question}
 Answer:
 [If sufficient information exists in context]
 1. [First main point]
- a. [Supporting detail]
- b. [Supporting detail]
+ - [Supporting detail]
+ - [Supporting detail]
 2. [Second main point]
- a. [Supporting detail]
+ - [Supporting detail]
  etc.
 
 [If information is incomplete or missing]
-Based on the provided context, I cannot fully answer this question. However, here is the relevant information that is available:
+Based on the provided context, here is the relevant information that is available:
 1. [Available information point]
+ - [Available detail]
 2. [Available information point]
+ - [Available detail]
 
 [If no relevant information exists]
 The provided context does not contain information to answer this question.
@@ -292,19 +294,29 @@ async def upload_files(files: list[UploadFile] = File(...)):
 
 @app.post("/index_documents/")
 async def index_documents(documents_in: list[DocumentIn]):
-    print(documents_in)
+    print(f"Received documents for indexing: {documents_in}")  # Debug logging
     try:
         documents = [
-            Document(page_content=doc.page_content, metadata=doc.metadata)
+            Document(
+                page_content=doc.page_content,
+                metadata={
+                    "customer_name": doc.metadata.get("customer_name", "Unknown")
+                }
+            )
             for doc in documents_in
         ]
+        
+        logging.info(f"Processing {len(documents)} documents for indexing")
+        logging.info(f"First document metadata example: {documents[0].metadata if documents else 'No documents'}")
+        
         result = index(
             documents,
             record_manager,
             vector_store,
             cleanup="full",
-            source_id_key="source",
+            source_id_key="customer_name",  # Changed to use customer_name
         )
         return result
     except Exception as e:
+        logging.error(f"Error during document indexing: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

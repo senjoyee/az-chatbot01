@@ -2,11 +2,15 @@
 # The Python Worker is managed by Azure Functions platform
 # Manually managing azure-functions-worker may cause unexpected issues
 
-azure-functions
-requests
-azure-storage-blob
-langchain
-unstructured
-langchain-community
-langchain-openai
-docx2txt
+azure-functions>=1.17.0
+requests>=2.31.0
+azure-storage-blob>=12.19.0
+langchain>=0.1.0
+langchain-community>=0.0.16
+langchain-openai>=0.0.5
+docx2txt>=0.8
+langchain-core>=0.1.17
+openai>=1.6.1
+pymupdf4llm>=0.0.17
+typing-extensions>=4.9.0
+azure-identity>=1.15.0

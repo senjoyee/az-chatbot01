@@ -304,3 +304,9 @@ dist
 
 # Built Visual Studio Code Extensions
 *.vsix
+
+# Exclude entire folder
+azmschatbot/
+
+# If the folder is already tracked, you might need to remove it from git's index using:
+# git rm -r --cached folder_name

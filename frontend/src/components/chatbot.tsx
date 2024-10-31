@@ -14,6 +14,67 @@ interface Message {
   sender: 'user' | 'assistant'
 }
 
+// Helper functions
+const isContactResponse = (text: string): boolean => {
+  return text.toLowerCase().includes('contact') && 
+         (text.toLowerCase().includes('email') || text.toLowerCase().includes('phone'));
+};
+
+const formatContactResponse = (text: string): string => {
+  // Get introduction text
+  const [intro, ...rest] = text.split(/(?=\d+\.)/);
+  let result = intro.trim() + '\n\n';
+  
+  // Process each contact block
+  let currentPerson = '';
+  let details: string[] = [];
+  
+  rest.forEach(block => {
+    const lines = block.split('\n').map(line => line.trim()).filter(Boolean);
+    
+    lines.forEach(line => {
+      if (line.match(/^\d+\./)) {
+        // If we have a previous person, add them to result
+        if (currentPerson) {
+          result += `${currentPerson}\n${details.join('\n')}\n\n`;
+          details = [];
+        }
+        currentPerson = line;
+      } else if (line.match(/^[a-z]\.|^-/)) {
+        details.push(line.replace(/^[a-z]\./, '-'));
+      } else if (!line.match(/^[A-Z]/)) {
+        details.push(`- ${line}`);
+      }
+    });
+  });
+  
+  // Add last person
+  if (currentPerson) {
+    result += `${currentPerson}\n${details.join('\n')}`;
+  }
+  
+  return result.trim();
+};
+
+const formatGeneralResponse = (text: string): string => {
+  return text
+    .replace(/\*\*/g, '')
+    .replace(/(.*?)(?=\d+\.|$)/s, '$1\n\n')
+    .replace(/([a-z])\.\s+/g, '- ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+};
+
+const formatBotResponse = (text: string): string => {
+  // Remove any markdown formatting
+  text = text.replace(/\*\*/g, '');
+  
+  // Choose formatter based on content
+  return isContactResponse(text) 
+    ? formatContactResponse(text)
+    : formatGeneralResponse(text);
+};
+
 export default function Chatbot() {
   const [messages, setMessages] = useState<Message[]>([
     { id: 1, text: "Hello! How can I assist you today?", sender: 'assistant' }
@@ -79,9 +140,10 @@ export default function Chatbot() {
         throw new Error('Invalid response format')
       }
   
+      // Update the botResponse creation in handleSend:
       const botResponse = { 
         id: messages.length + 2, 
-        text: data.answer, 
+        text: formatBotResponse(data.answer), 
         sender: 'assistant' 
       }
       
@@ -98,7 +160,7 @@ export default function Chatbot() {
 
   return (
     <div className="flex h-screen items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 p-4">
-      <div className="relative w-full max-w-4xl rounded-lg bg-white shadow-2xl overflow-hidden">
+      <div className="relative w-full max-w-6xl rounded-lg bg-white shadow-2xl overflow-hidden"> {/* Increased from max-w-4xl */}
         {/* Background Logo */}
         <div className="absolute inset-0 flex items-center justify-center opacity-5">
           <img 
@@ -123,7 +185,7 @@ export default function Chatbot() {
           )}
 
           {/* Messages Area */}
-          <ScrollArea className="flex-grow p-6" ref={scrollAreaRef}>
+          <ScrollArea className="flex-grow px-8 py-6" ref={scrollAreaRef}> {/* Increased from p-6 */}
             {messages.map((message) => (
               <div
                 key={message.id}
@@ -137,10 +199,10 @@ export default function Chatbot() {
                   </Avatar>
                 )}
                 <div
-                  className={`inline-block p-4 rounded-lg max-w-[70%] ${
+                  className={`inline-block p-4 rounded-lg max-w-[85%] ${
                     message.sender === 'user'
-                      ? 'bg-primary text-primary-foreground rounded-br-none'
-                      : 'bg-gray-100 text-gray-800 rounded-bl-none'
+                      ? 'bg-primary/80 text-primary-foreground rounded-br-none' // Added /80 for 80% opacity
+                      : 'bg-gray-100 text-gray-800 rounded-bl-none whitespace-pre-line font-normal leading-[1.2]'
                   }`}
                 >
                   {message.text}
