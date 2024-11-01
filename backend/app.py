@@ -100,7 +100,7 @@ Guidelines for answering:
 1. I will analyze the question and context thoroughly
 2. Present information in a clear, structured format
 3. Use numbered points for main ideas
-4. Use dashes (-) for sub-points instead of letters
+4. Use a, b for sub-points instead of dashes 
 5. Ensure all points are supported by the context
 6. Clearly indicate if information is incomplete
 7. Maintain consistency throughout the response
@@ -110,18 +110,18 @@ Question: {question}
 Answer:
 [If sufficient information exists in context]
 1. [First main point]
- - [Supporting detail]
- - [Supporting detail]
+    a. [Supporting detail]
+    b. [Supporting detail]
 2. [Second main point]
- - [Supporting detail]
- etc.
+    a. [Supporting detail]
+    etc.
 
 [If information is incomplete or missing]
 Based on the provided context, here is the relevant information that is available:
 1. [Available information point]
- - [Available detail]
+    a. [Available detail]
 2. [Available information point]
- - [Available detail]
+    a. [Available detail]
 
 [If no relevant information exists]
 The provided context does not contain information to answer this question.
