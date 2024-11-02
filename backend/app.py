@@ -4,7 +4,7 @@ from operator import itemgetter
 
 from azure.storage.blob import BlobServiceClient
 from dotenv import find_dotenv, load_dotenv
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from fastapi import FastAPI, File, HTTPException, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
 from langchain_openai import AzureChatOpenAI
 from langchain_openai import AzureOpenAIEmbeddings
@@ -15,7 +15,7 @@ from langchain.schema.runnable import RunnableParallel, RunnablePassthrough
 from langchain_community.document_loaders import Docx2txtLoader
 from langchain_postgres import PGVector
 from pydantic import BaseModel, Field
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.sql import text
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -39,8 +39,17 @@ CONNECTION_STRING = (
 )
 
 namespace = f"pgvector/{COLLECTION_NAME}"
-record_manager = SQLRecordManager(namespace, db_url=CONNECTION_STRING)
-record_manager.create_schema()
+
+# Update the record manager initialization
+try:
+    record_manager = SQLRecordManager(namespace, db_url=CONNECTION_STRING)
+    record_manager.create_schema()
+    # Verify connection
+    record_manager.list_keys()  # This will test the connection
+    logger.info("Record manager initialized successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize record manager: {str(e)}")
+    raise
 
 embeddings = AzureOpenAIEmbeddings(model="text-embedding-3-large",dimensions="1536")
 
@@ -219,35 +228,35 @@ async def ask_question(request: ConversationRequest) -> dict:
 
 
 @app.get("/listfiles")
-async def list_files(page: int = 1, page_size: int = 10):
-  try:
-      container_client = blob_service_client.get_container_client(container_name)
-      blob_list = list(container_client.list_blobs())  # Convert to list to materialize it
-      
-      files = [{
-          "name": blob.name,
-          "size": blob.size,
-          "lastModified": blob.last_modified.isoformat() if blob.last_modified else None,
-          "contentType": blob.content_settings.content_type if blob.content_settings else None
-      } for blob in blob_list]
-      
-      total_files = len(files)
-      start = (page - 1) * page_size
-      end = start + page_size
-      
-      response_data = {
-          "total_files": total_files,
-          "files": files[start:end],
-          "page": page,
-          "total_pages": (total_files - 1) // page_size + 1,
-      }
-      
-      logger.info(f"Returning files response: {response_data}")
-      return response_data
-      
-  except Exception as e:
-      logger.error(f"Error in list_files: {str(e)}")
-      raise HTTPException(status_code=500, detail=str(e))
+async def list_files(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+):
+    try:
+        container_client = blob_service_client.get_container_client(container_name)
+        blob_list = list(container_client.list_blobs())
+        
+        # Calculate pagination
+        start = (page - 1) * page_size
+        end = start + page_size
+        
+        files = [{
+            "name": blob.name,
+            "size": blob.size,
+            "lastModified": blob.last_modified.isoformat(),
+            "contentType": blob.content_settings.content_type
+        } for blob in blob_list]
+        
+        return {
+            "total_files": len(files),
+            "files": files[start:end],
+            "page": page,
+            "total_pages": (len(files) - 1) // page_size + 1,
+        }
+    except Exception as e:
+        logger.error(f"Error in list_files: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.delete("/deletefile/{filename}")
 async def delete_file(filename: str):
@@ -294,29 +303,41 @@ async def upload_files(files: list[UploadFile] = File(...)):
 
 @app.post("/index_documents/")
 async def index_documents(documents_in: list[DocumentIn]):
-    print(f"Received documents for indexing: {documents_in}")  # Debug logging
+    print(documents_in)
     try:
         documents = [
-            Document(
-                page_content=doc.page_content,
-                metadata={
-                    "customer_name": doc.metadata.get("customer_name", "Unknown")
-                }
-            )
+            Document(page_content=doc.page_content, metadata=doc.metadata)
             for doc in documents_in
         ]
-        
-        logging.info(f"Processing {len(documents)} documents for indexing")
-        logging.info(f"First document metadata example: {documents[0].metadata if documents else 'No documents'}")
-        
         result = index(
             documents,
             record_manager,
             vector_store,
             cleanup="full",
-            source_id_key="customer_name",  # Changed to use customer_name
+            source_id_key="source",
         )
         return result
     except Exception as e:
-        logging.error(f"Error during document indexing: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/clear_indexes")
+async def clear_indexes():
+    try:
+        # Get all keys in the current namespace
+        keys = record_manager.list_keys()
+        # Delete all keys
+        if keys:
+            record_manager.delete_keys(keys)
+        
+        # Clear vector store
+        engine = create_engine(CONNECTION_STRING)
+        with engine.connect() as connection:
+            connection.execute(text("TRUNCATE TABLE langchain_pg_embedding"))
+            connection.commit()
+            
+        logger.info("Successfully cleared all indexes")
+        return {"message": "All indexes cleared successfully"}
+    except Exception as e:
+        logger.error(f"Error clearing indexes: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
