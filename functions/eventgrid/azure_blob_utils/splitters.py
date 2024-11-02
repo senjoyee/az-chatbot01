@@ -7,9 +7,8 @@ from langchain_core.documents import Document
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
-from langchain_text_splitters.base import TextSplitter
+from langchain_text_splitters import TextSplitter
 from langchain_openai import AzureChatOpenAI
-
 
 class GPTSplitter(TextSplitter):
     def __init__(
@@ -114,32 +113,22 @@ class GPTSplitter(TextSplitter):
             chunks = [chunk.strip(">>>").strip() for chunk in chunks]
             self._cache[cache_key] = chunks
             
-            return [
-                Document(
-                    page_content=chunk, 
-                    metadata={
-                        "customer_name": customer_name,
-                        "source": source
-                    }
-                ) for chunk in chunks
-            ]
-            
         except Exception as e:
             logging.error(f"GPT splitting failed: {e}")
             chunks = self._fallback_split(normalized_text)
             self._cache[cache_key] = chunks
-            return [
-                Document(
-                    page_content=chunk, 
-                    metadata={
-                        "customer_name": customer_name,
-                        "source": source
-                    }
-                ) for chunk in chunks
-            ]
+            
+        return [
+            Document(
+                page_content=chunk, 
+                metadata={
+                    "customer_name": customer_name,
+                    "source": source
+                }
+            ) for chunk in chunks
+        ]
     
     def _fallback_split(self, text: str) -> List[str]:
         header_pattern = r'\n\d+\.\s+[A-Z]|\n[A-Z][^a-z\n]+\n'
         chunks = re.split(header_pattern, text)
-        chunks = [chunk.strip() for chunk in chunks if chunk.strip()]
-        return chunks
+        return [chunk.strip() for chunk in chunks if chunk.strip()]
