@@ -40,7 +40,14 @@ def eventGridTest(event: func.EventGridEvent):
         
         text_splitter = GPTSplitter()
 
-        split_documents = text_splitter.split_text(data)
+        split_documents = []
+        for doc in data:
+            chunks = text_splitter.split_text(
+                text=doc.page_content,
+                source=doc.metadata.get('source', 'unknown')
+            )
+            split_documents.extend(chunks)
+            
         logging.info(f"Document count after splitting: {len(split_documents)}")
 
         # Prepare payload
