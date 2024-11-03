@@ -19,34 +19,39 @@ class EnhancedAzureBlobStorageLoader(BaseLoader):
     def _process_pdf(self, file_path: str) -> List[Document]:
         try:
             import pymupdf4llm
+            import re
         except ImportError:
             raise ImportError(
                 "Could not import pymupdf4llm package. "
                 "Please install it with `pip install pymupdf4llm`."
             )
         
-        # Extract full document text without page chunks
+        # Extract markdown content
         md_content = pymupdf4llm.to_markdown(
             doc=file_path,
-            page_chunks=False  # Changed to False to get full document
+            page_chunks=False  # Get full content
         )
 
-        # Handle the single document case
-        content = md_content[0] if isinstance(md_content, list) else md_content
-        
-        if isinstance(content, dict):
-            text = content.get('text', '')
-        else:
-            text = content
+        # Clean markdown formatting
+        # Remove headers (#), lists (*,-), code blocks (```)
+        def clean_markdown(text: str) -> str:
+            text = re.sub(r'#{1,6}\s+', '', text)  # Remove headers
+            text = re.sub(r'[*-]\s+', '', text)    # Remove list markers
+            text = re.sub(r'`{3}.*?`{3}', '', text, flags=re.DOTALL)  # Remove code blocks
+            text = re.sub(r'\s+', ' ', text)       # Normalize whitespace
+            return text.strip()
 
-        logging.info(f"Extracted {len(text)} characters from PDF: {self.blob}")
-        
+        # Process content and clean markdown
+        content = clean_markdown(md_content) if isinstance(md_content, str) else ""
+
+        # Return single document
         return [
             Document(
-                page_content=text,
+                page_content=content,
                 metadata={
                     'source': self.blob,
                     'file_path': file_path,
+                    'format': 'pdf'
                 }
             )
         ]
@@ -61,8 +66,6 @@ class EnhancedAzureBlobStorageLoader(BaseLoader):
             )
         
         text = docx2txt.process(file_path)
-        logging.info(f"Extracted {len(text)} characters from DOCX: {self.blob}")
-        
         return [
             Document(
                 page_content=text,
@@ -77,8 +80,6 @@ class EnhancedAzureBlobStorageLoader(BaseLoader):
     def _process_text(self, file_path: str) -> List[Document]:
         with open(file_path, 'r', encoding='utf-8') as file:
             text = file.read()
-        
-        logging.info(f"Extracted {len(text)} characters from text file: {self.blob}")
         
         return [
             Document(

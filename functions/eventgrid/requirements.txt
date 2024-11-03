@@ -1,9 +1,20 @@
+# Azure Core
 azure-functions
-requests
 azure-storage-blob
-langchain
+azure-identity
+
+# HTTP/API
+requests
+
+# LangChain
+langchain-core
+langchain-openai
 langchain-community
 langchain-text-splitters
-unstructured[pdf]
-unstructured[docx]
-unstructured
+
+# Document Processing
+pymupdf4llm
+docx2txt
+
+# Utils
+python-dotenv
