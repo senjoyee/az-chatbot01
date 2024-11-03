@@ -5,6 +5,7 @@ import requests
 import azure.functions as func
 from azure.storage.blob import BlobServiceClient
 from azure_blob_utils.loaders import EnhancedAzureBlobStorageContainerLoader
+from azure_blob_utils.splitters import GPTSplitter
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 app = func.FunctionApp()
@@ -36,21 +37,20 @@ def eventGridTest(event: func.EventGridEvent):
             logging.info(f"Document {idx} source: {doc.metadata.get('source', 'unknown')}")
             logging.info(f"Document {idx} content length: {len(doc.page_content)}")
 
-        # Split documents
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP,
-            length_function=len,
-            is_separator_regex=False,
-        )
-        split_documents = text_splitter.split_documents(data)
+        
+        text_splitter = GPTSplitter()
+
+        split_documents = text_splitter.split_text(data)
         logging.info(f"Document count after splitting: {len(split_documents)}")
 
         # Prepare payload
         documents_in = [
             {
                 "page_content": doc.page_content,
-                "metadata": {"source": doc.metadata["source"]},
+                "metadata": {
+                    "source": doc.metadata["source"],
+                    "customer_name": doc.metadata.get("customer_name", "Unknown")
+                }
             }
             for doc in split_documents
         ]
