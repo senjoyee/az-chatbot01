@@ -98,7 +98,7 @@ class EnhancedAzureBlobStorageLoader(BaseLoader):
             container_name=self.container,
             blob_name=self.blob
         )
-
+        
         with tempfile.TemporaryDirectory() as temp_dir:
             file_path = f"{temp_dir}/{self.container}/{self.blob}"
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
@@ -106,27 +106,37 @@ class EnhancedAzureBlobStorageLoader(BaseLoader):
             with open(file_path, "wb") as file:
                 blob_data = client.download_blob()
                 blob_data.readinto(file)
-
+                
             file_extension = self._get_file_extension(self.blob)
             
-            if file_extension == '.pdf':
-                documents = self._process_pdf(file_path)
-            elif file_extension in ['.docx', '.doc']:
-                documents = self._process_docx(file_path)
-            elif file_extension in ['.txt', '.text']:
-                documents = self._process_text(file_path)
-            else:
-                documents = self._process_pdf(file_path)
-
-            # Verify that each document has 'source' in metadata
-            for idx, doc in enumerate(documents):
-                if not doc.metadata.get('source'):
-                    logging.error(f"Loaded document at index {idx} is missing 'source' in metadata")
-                    doc.metadata['source'] = self.blob or "unknown"
+            try:
+                if file_extension == '.pdf':
+                    documents = self._process_pdf(file_path)
+                elif file_extension in ['.docx', '.doc']:
+                    documents = self._process_docx(file_path)
+                elif file_extension in ['.txt', '.text']:
+                    documents = self._process_text(file_path)
                 else:
-                    logging.info(f"Loaded document {idx} has source: {doc.metadata['source']}")
-
-            return documents
+                    # Try docx first, then fallback to text
+                    try:
+                        documents = self._process_docx(file_path)
+                    except Exception as e:
+                        logging.warning(f"Failed to process as docx, trying text: {e}")
+                        documents = self._process_text(file_path)
+                        
+                # Verify metadata
+                for idx, doc in enumerate(documents):
+                    if not doc.metadata.get('source'):
+                        logging.error(f"Document {idx} missing source in metadata")
+                        doc.metadata['source'] = self.blob or "unknown"
+                    else:
+                        logging.info(f"Document {idx} has source: {doc.metadata['source']}")
+                return documents
+                
+            except Exception as e:
+                logging.error(f"Failed to process {self.blob}: {str(e)}")
+                # Fallback to basic text processing
+                return self._process_text(file_path)
 
 class EnhancedAzureBlobStorageContainerLoader(BaseLoader):
     def __init__(self, conn_str: str, container: str, prefix: str = ""):
