@@ -6,7 +6,7 @@ import azure.functions as func
 from azure.storage.blob import BlobServiceClient
 from azure_blob_utils.loaders import EnhancedAzureBlobStorageContainerLoader
 from azure_blob_utils.splitters import GPTSplitter
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+
 
 app = func.FunctionApp()
 

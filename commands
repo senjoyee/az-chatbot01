@@ -32,5 +32,5 @@ az postgres flexible-server list --query "[].{name:name, resourceGroup:resourceG
 az postgres flexible-server stop --resource-group js-sapservices-tools --name sapmscbpgdb
 az postgres flexible-server start --resource-group js-sapservices-tools --name sapmscbpgdb
 
-
-func azure functionapp publish js-sap-func
+func new --template "EventGridTrigger"
+func azure functionapp publish jsragfunc03
