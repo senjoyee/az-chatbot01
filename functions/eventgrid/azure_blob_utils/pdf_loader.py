@@ -19,20 +19,27 @@ class PDFLoader(BaseDocumentLoader):
             doc = fitz.open(temp_path)
             full_text = []
             
-            # Combine all pages into one text string
-            for page_num, page in enumerate(doc):
-                text = page.get_text()
-                if text.strip():
-                    full_text.append(text)
+            for page in doc:
+                # Get text blocks with layout analysis
+                blocks = page.get_text("blocks")
+                # Sort blocks top to bottom, left to right
+                blocks.sort(key=lambda b: (-b[1], b[0]))
+                
+                # Process each text block
+                for block in blocks:
+                    text = block[4].strip()
+                    if text:
+                        full_text.append(text)
             
-            # Create single document with combined text
             if full_text:
+                # Join blocks with double newlines to preserve paragraph structure
+                content = '\n\n'.join(full_text)
                 metadata = {
                     'source': f"{self.container_name}/{blob_name}",
                     'total_pages': len(doc),
                     'file_type': 'pdf'
                 }
-                return [Document(page_content='\n'.join(full_text), metadata=metadata)]
+                return [Document(page_content=content, metadata=metadata)]
             return []
             
         except Exception as e:
