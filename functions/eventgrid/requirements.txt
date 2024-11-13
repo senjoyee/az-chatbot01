@@ -7,14 +7,17 @@ azure-identity
 requests
 
 # LangChain
+langchain
 langchain-core
 langchain-openai
 langchain-community
 langchain-text-splitters
 
 # Document Processing
-pymupdf4llm
-docx2txt
+python-docx
+PyMuPDF
+pymupdf4llm  # Add this instead of frontend
 
 # Utils
 python-dotenv
+urllib3
