@@ -87,39 +87,34 @@ def eventGridTest(event: func.EventGridEvent):
         # Load all documents from container - this handles both new files and deletions
         # through the cleanup="full" parameter in the indexing API
         documents = loader.load_from_container()
-        
-        if not documents:
-            logging.warning("No documents found in container")
-            return
-
-        # Process chunks with consistent metadata
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP,
-            length_function=len
-        )
-        
-        chunks = text_splitter.split_documents(documents)
-        
-        # Prepare chunks for indexing
         chunk_data = []
-        for i, chunk in enumerate(chunks):
-            if not chunk.page_content.strip():
-                continue
-                
-            chunk_data.append({
-                'page_content': chunk.page_content,
-                'metadata': {
-                    **chunk.metadata,
-                    'chunk_index': i,
-                    'total_chunks': len(chunks)
-                }
-            })
+        
+        if documents:
+            # Process chunks with consistent metadata
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP,
+                length_function=len
+            )
+            
+            chunks = text_splitter.split_documents(documents)
+            
+            # Prepare chunks for indexing
+            for i, chunk in enumerate(chunks):
+                if not chunk.page_content.strip():
+                    continue
+                    
+                chunk_data.append({
+                    'page_content': chunk.page_content,
+                    'metadata': {
+                        **chunk.metadata,
+                        'chunk_index': i,
+                        'total_chunks': len(chunks)
+                    }
+                })
 
-        if not chunk_data:
-            raise ValueError("No valid content chunks extracted")
-
-        # Send to FastAPI endpoint - this will handle both indexing and cleanup
+        # Always send to FastAPI endpoint - even if chunk_data is empty
+        # The cleanup="full" parameter will handle cleanup of old documents
         response = requests.post(
             FASTAPI_ENDPOINT,
             json=chunk_data

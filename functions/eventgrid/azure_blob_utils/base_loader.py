@@ -23,8 +23,12 @@ class BaseDocumentLoader(ABC):
             documents = []
             
             # List all blobs with given prefix
-            blob_list = container_client.list_blobs(name_starts_with=prefix)
+            blob_list = list(container_client.list_blobs(name_starts_with=prefix))
             
+            if not blob_list:
+                logging.info("No blobs found in container")
+                return []  # Return empty list instead of None
+                
             for blob in blob_list:
                 try:
                     # Get file extension
