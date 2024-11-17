@@ -12,7 +12,8 @@ from langchain.indexes import SQLRecordManager, index
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.schema import Document, StrOutputParser, format_document
 from langchain.schema.runnable import RunnableParallel, RunnablePassthrough
-from langchain_community.document_loaders import Docx2txtLoader
+from langchain_community.document_loaders import AzureBlobStorageContainerLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_postgres import PGVector
 from pydantic import BaseModel, Field
 from sqlalchemy import create_engine, text
@@ -29,6 +30,9 @@ logger = logging.getLogger(__name__)
 conn_str = os.getenv("BLOB_CONN_STRING")
 container_name = os.getenv("BLOB_CONTAINER")
 blob_service_client = BlobServiceClient.from_connection_string(conn_str=conn_str)
+# Constants for chunking
+CHUNK_SIZE = 5000
+CHUNK_OVERLAP = 200
 
 host = os.getenv("PG_VECTOR_HOST")
 user = os.getenv("PG_VECTOR_USER")
@@ -79,6 +83,9 @@ class ConversationRequest(BaseModel):
 class DocumentIn(BaseModel):
     page_content: str
     metadata: dict = Field(default_factory=dict)
+
+class BlobProcessRequest(BaseModel):
+    blob_url: str
 
 
 def _format_chat_history(conversation: list[Message]) -> str:
@@ -167,12 +174,15 @@ conversational_qa_chain = _inputs | _context | ANSWER_PROMPT | llm | StrOutputPa
 app = FastAPI()
 
 app.add_middleware(
-  CORSMiddleware,
-  allow_origins=["https://documentchatbot01.azurewebsites.net"],  # Frontend URL
-  allow_credentials=True,
-  allow_methods=["*"],
-  allow_headers=["*"],
-  expose_headers=["*"],
+    CORSMiddleware,
+    allow_origins=[
+        "https://documentchatbot01.azurewebsites.net",  # Frontend URL
+        "https://jsragfunc01.azurewebsites.net",        # Function App URL
+    ],
+    allow_credentials=True,
+    allow_methods=["POST", "GET", "DELETE"],  # Specify allowed methods
+    allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 
@@ -300,6 +310,58 @@ async def upload_files(files: list[UploadFile] = File(...)):
       uploaded_files.append(file.filename)
 
   return {"uploaded_files": uploaded_files}
+
+
+@app.post("/process_uploaded_files")
+async def process_uploaded_files():
+    try:
+        loader = AzureBlobStorageContainerLoader(
+            conn_str=conn_str,
+            container=container_name
+        )
+        
+        data = loader.load()
+        logger.info(f"Loaded {len(data)} documents from blob storage")
+        
+        text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=CHUNK_SIZE,
+            chunk_overlap=CHUNK_OVERLAP
+        )
+        
+        split_documents = text_splitter.split_documents(data)
+        logger.info(f"Split into {len(split_documents)} chunks")
+        
+        batch_size = 100
+        total_processed = 0
+        
+        for i in range(0, len(split_documents), batch_size):
+            batch = split_documents[i:i + batch_size]
+            documents_in = [
+                DocumentIn(
+                    page_content=str(doc.page_content),
+                    metadata={
+                        "source": os.path.basename(str(doc.metadata.get("source", "")))
+                    }
+                )
+                for doc in batch
+            ]
+            
+            # Index with full cleanup mode
+            await index_documents(documents_in)
+            total_processed += len(batch)
+            logger.info(f"Processed {total_processed}/{len(split_documents)} documents")
+
+        return {
+            "message": "Documents processed successfully",
+            "document_count": len(split_documents),
+            "total_processed": total_processed
+        }
+        
+    except Exception as e:
+        logger.error(f"Error processing documents: {str(e)}")
+        logger.error(f"Document data: {data if 'data' in locals() else 'Not loaded'}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.post("/index_documents/")
 async def index_documents(documents_in: list[DocumentIn]):

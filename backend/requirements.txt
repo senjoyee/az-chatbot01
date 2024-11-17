@@ -1,17 +1,17 @@
 fastapi
 uvicorn
-redis
 requests
 python-dotenv
 langchain
-langchain_openai
-langchain_community
-langchain_postgres
+langchain-openai
+langchain-community
+langchain-postgres
+langchain-text-splitters
 typing_extensions
 python-multipart
 psycopg2-binary
 azure-storage-blob
-azure-functions
-docx2txt
+unstructured[all-docs]
+python-magic
 
 

@@ -1,6 +1,4 @@
 #!/bin/sh
-# wait-for-postgres.sh
-
 set -e
 
 # Fetch the host and port from the environment variables
@@ -18,5 +16,5 @@ done
 
 >&2 echo "Postgres is up - executing command"
 
-# Now we can execute the CMD passed to the Docker container
+# Execute the CMD passed to the Docker container
 exec "$@"

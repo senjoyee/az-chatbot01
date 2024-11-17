@@ -33,4 +33,4 @@ az postgres flexible-server stop --resource-group js-sapservices-tools --name sa
 az postgres flexible-server start --resource-group js-sapservices-tools --name sapmscbpgdb
 
 func new --template "EventGridTrigger"
-func azure functionapp publish jsragfunc03
+func azure functionapp publish jsragfunc01

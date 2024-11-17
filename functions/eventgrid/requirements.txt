@@ -2,22 +2,5 @@
 azure-functions
 azure-storage-blob
 azure-identity
-
-# HTTP/API
 requests
-
-# LangChain
-langchain
-langchain-core
-langchain-openai
-langchain-community
-langchain-text-splitters
-
-# Document Processing
-python-docx
-PyMuPDF
-pymupdf4llm  # Add this instead of frontend
-
-# Utils
 python-dotenv
-urllib3
