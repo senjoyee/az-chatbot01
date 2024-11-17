@@ -334,22 +334,27 @@ async def process_uploaded_files():
         batch_size = 100
         total_processed = 0
         
-        for i in range(0, len(split_documents), batch_size):
-            batch = split_documents[i:i + batch_size]
-            documents_in = [
-                DocumentIn(
-                    page_content=str(doc.page_content),
-                    metadata={
-                        "source": os.path.basename(str(doc.metadata.get("source", "")))
-                    }
-                )
-                for doc in batch
-            ]
-            
-            # Index with full cleanup mode
-            await index_documents(documents_in)
-            total_processed += len(batch)
-            logger.info(f"Processed {total_processed}/{len(split_documents)} documents")
+        if len(split_documents) > 0:
+            for i in range(0, len(split_documents), batch_size):
+                batch = split_documents[i:i + batch_size]
+                documents_in = [
+                    DocumentIn(
+                        page_content=str(doc.page_content),
+                        metadata={
+                            "source": os.path.basename(str(doc.metadata.get("source", "")))
+                        }
+                    )
+                    for doc in batch
+                ]
+                
+                # Index with full cleanup mode
+                await index_documents(documents_in)
+                total_processed += len(batch)
+                logger.info(f"Processed {total_processed}/{len(split_documents)} documents")
+        else:
+            # If no documents, call index_documents with empty list to trigger cleanup
+            logger.info("No documents found in blob storage, cleaning up indexes")
+            await index_documents([])
 
         return {
             "message": "Documents processed successfully",
