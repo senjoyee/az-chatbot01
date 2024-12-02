@@ -25,11 +25,25 @@ http.mount("https://", HTTPAdapter(max_retries=retry_strategy))
 @app.event_grid_trigger(arg_name="event")
 def eventGridTest(event: func.EventGridEvent):
     try:
+        # Extract event type and file path from the event
+        event_type = event.event_type
+        file_path = event.subject
+        
+        # Get just the file name from the full path
+        # The subject format is typically: /blobServices/default/containers/{container-name}/blobs/{blob-name}
+        file_name = file_path.split('/')[-1]
+        
+        logging.info(f"Event Type: {event_type}")
+        logging.info(f"File Name: {file_name}")
+        
         logging.info(f"Making request to {FASTAPI_ENDPOINT} to process documents")
         
         response = http.post(
             FASTAPI_ENDPOINT,
-            json={},  # Empty payload since we just need to trigger processing
+            json={
+                "event_type": event_type,
+                "file_name": file_name
+            },
             timeout=30
         )
         
