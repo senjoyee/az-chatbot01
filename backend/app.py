@@ -163,12 +163,6 @@ llm = AzureChatOpenAI(
     temperature=0.3
 )
 
-# Initialize the retriever from vector store
-retriever = vector_store.as_retriever(
-    search_type="hybrid",
-    search_kwargs={"k": 4}  # Fetch top 4 most relevant documents
-)
-
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
 {chat_history}
@@ -245,7 +239,12 @@ _inputs = RunnableParallel(
 )
 
 _context = {
-    "context": itemgetter("standalone_question") | retriever | _combine_documents,
+    "context": lambda x: _combine_documents(
+        vector_store.hybrid_search(
+            x["standalone_question"],
+            k=4
+        )
+    ),
     "question": lambda x: x["standalone_question"],
 }
 
