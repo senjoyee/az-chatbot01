@@ -154,6 +154,10 @@ class DocumentIn(BaseModel):
     page_content: str
     metadata: dict = Field(default_factory=dict)
 
+class BlobEvent(BaseModel):
+    event_type: str
+    file_name: str
+
 # Initialize the chat model
 llm = AzureChatOpenAI(
     azure_deployment="gpt-4o-mini",
@@ -386,79 +390,118 @@ async def upload_files(files: list[UploadFile] = File(...)):
 
 
 @app.post("/process_uploaded_files")
-async def process_uploaded_files():
+async def process_uploaded_files(event: BlobEvent):
     try:
-        loader = AzureBlobStorageContainerLoader(
-            conn_str=BLOB_CONN_STRING,
-            container=BLOB_CONTAINER
-        )
+        logger.info(f"Processing {event.event_type} event for file: {event.file_name}")
         
-        data = loader.load()
-        logger.info(f"Loaded {len(data)} documents from blob storage")
-        
-        text_splitter = RecursiveCharacterTextSplitter(
-            chunk_size=CHUNK_SIZE,
-            chunk_overlap=CHUNK_OVERLAP
-        )
-        
-        split_documents = text_splitter.split_documents(data)
-        logger.info(f"Split into {len(split_documents)} chunks")
-        
-        batch_size = 100
-        total_processed = 0
-        
-        if len(split_documents) > 0:
-            for i in range(0, len(split_documents), batch_size):
-                batch = split_documents[i:i + batch_size]
-                documents_in = [
-                    DocumentIn(
-                        page_content=str(doc.page_content),
-                        metadata={
-                            "source": os.path.basename(str(doc.metadata.get("source", "")))
-                        }
-                    )
-                    for doc in batch
-                ]
-                
-                # Index with full cleanup mode
-                await index_documents(documents_in)
-                total_processed += len(batch)
-                logger.info(f"Processed {total_processed}/{len(split_documents)} documents")
+        if event.event_type == "Microsoft.Storage.BlobDeleted":
+            return await delete_from_vector_store(event.file_name)
+            
+        elif event.event_type == "Microsoft.Storage.BlobCreated":
+            # First, clean up any existing chunks (handles updates)
+            try:
+                await delete_from_vector_store(event.file_name)
+                logger.info(f"Cleaned up existing chunks for update: {event.file_name}")
+            except HTTPException as e:
+                if e.status_code != 404:  # Ignore if no existing chunks found
+                    raise
+            
+            # Process the new file
+            loader = AzureBlobStorageContainerLoader(
+                conn_str=BLOB_CONN_STRING,
+                container=BLOB_CONTAINER
+            )
+            
+            data = loader.load()
+            logger.info(f"Loaded {len(data)} documents from blob storage")
+            
+            text_splitter = RecursiveCharacterTextSplitter(
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=CHUNK_OVERLAP
+            )
+            
+            split_documents = text_splitter.split_documents(data)
+            logger.info(f"Split into {len(split_documents)} chunks")
+            
+            batch_size = 100
+            total_processed = 0
+            
+            if len(split_documents) > 0:
+                for i in range(0, len(split_documents), batch_size):
+                    batch = split_documents[i:i + batch_size]
+                    documents_in = [
+                        DocumentIn(
+                            page_content=str(doc.page_content),
+                            metadata={
+                                "source": os.path.basename(str(doc.metadata.get("source", "")))
+                            }
+                        )
+                        for doc in batch
+                    ]
+                    
+                    await index_documents(documents_in)
+                    total_processed += len(batch)
+                    logger.info(f"Processed {total_processed}/{len(split_documents)} documents")
+            
+            return {
+                "message": "Documents processed successfully",
+                "document_count": len(split_documents),
+                "total_processed": total_processed
+            }
         else:
-            # If no documents, call index_documents with empty list to trigger cleanup
-            logger.info("No documents found in blob storage, cleaning up indexes")
-            await index_documents([])
-
-        return {
-            "message": "Documents processed successfully",
-            "document_count": len(split_documents),
-            "total_processed": total_processed
-        }
-        
+            logger.warning(f"Unhandled event type: {event.event_type}")
+            return {"message": f"Unhandled event type: {event.event_type}"}
+            
     except Exception as e:
-        logger.error(f"Error processing documents: {str(e)}")
-        logger.error(f"Document data: {data if 'data' in locals() else 'Not loaded'}")
+        logger.error(f"Error processing event: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+async def delete_from_vector_store(filename: str) -> dict:
+    """
+    Delete all document chunks associated with a specific file from the vector store.
+    """
+    try:
+        logger.info(f"Starting deletion process for file: {filename}")
+        logger.info(f"Searching for documents with source: {filename}")
+        documents_to_delete = search_client.search(
+            search_text="",
+            filter=f"source eq '{filename}'"
+        )
+        
+        deleted_count = 0
+        for doc in documents_to_delete:
+            logger.info(f"Deleting chunk {deleted_count + 1} with ID: {doc['id']}")
+            search_client.delete_documents(documents=[{"id": doc["id"]}])
+            deleted_count += 1
+            
+        logger.info(f"Deletion complete. Removed {deleted_count} chunks for file: {filename}")
+        return {
+            "message": f"Deleted {deleted_count} chunks for file {filename}",
+            "deleted_count": deleted_count
+        }
+    except Exception as e:
+        logger.error(f"Error deleting chunks for file {filename}: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/index_documents/")
 async def index_documents(documents_in: list[DocumentIn]):
-    logging.debug('Starting document indexing process')
+    logger.info(f"Starting indexing process for {len(documents_in)} documents")
     try:
-        for document in documents_in:
-            logging.debug('Processing document: %s', document.metadata['source'])
-            # Assuming `get_document_embedding` is a function that generates embeddings
+        for i, document in enumerate(documents_in, 1):
+            logger.info(f"Processing document {i}/{len(documents_in)}: {document.metadata.get('source', 'unknown')}")
             try:
+                logger.info("Generating embedding...")
                 embedding = embeddings.embed_query(document.page_content)
-                logging.debug('Generated embedding for document: %s', document.metadata['source'])
+                logger.info(f"Generated embedding of size: {len(embedding)}")
             except Exception as e:
-                logging.error('Error generating embedding for document: %s', str(e))
+                logger.error(f"Error generating embedding: {str(e)}")
                 continue
             
-            # Create a unique ID for each document
             doc_id = f"doc_{hash(document.page_content)}"
+            logger.info(f"Created document ID: {doc_id}")
             
-            # Create the document object
             document_obj = {
                 "id": doc_id,
                 "content": document.page_content,
@@ -467,17 +510,16 @@ async def index_documents(documents_in: list[DocumentIn]):
                 "source": document.metadata.get("source", "unknown")
             }
             
-            # Index document in Azure Search
-            logging.debug('Indexing document into Azure Search: %s', document.metadata['source'])
+            logger.info(f"Indexing document into Azure Search: {doc_id}")
             try:
                 result = search_client.upload_documents(documents=[document_obj])
-                logging.debug('Indexed document into Azure Search: %s', document.metadata['source'])
+                logger.info(f"Successfully indexed document {i}/{len(documents_in)}")
             except Exception as e:
-                logging.error('Error indexing document: %s', str(e))
+                logger.error(f"Error indexing document {doc_id}: {str(e)}")
                 raise
-            logging.debug('Successfully indexed document: %s', document.metadata['source'])
+
     except Exception as e:
-        logging.error('Error during document indexing: %s', str(e))
+        logger.error(f"Error during document indexing: {str(e)}")
         raise
-    logging.debug('Completed document indexing process')
+    logger.info(f"Completed indexing process. Successfully indexed {len(documents_in)} documents")
     return {"message": f"Successfully indexed {len(documents_in)} documents"}
