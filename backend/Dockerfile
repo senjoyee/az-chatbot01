@@ -1,21 +1,19 @@
 # Use an official Python runtime as a parent image
-FROM python:3.11-bookworm-slim
+FROM python:3.11-slim-bookworm
 
+# Set environment variables
 ENV PYTHONUNBUFFERED=1 \
-    DEBIAN_FRONTEND=noninteractive
+    DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PORT=5000
 
-# Set the working directory in the container
+# Set the working directory
 WORKDIR /app
 
-# Copy the current directory contents into the container at /app
-COPY . /app
-
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Install PostgreSQL client & other dependencies
-RUN apt-get update && apt-get install -y \
-    postgresql-client \
+# Install system dependencies
+# These are less likely to change, so we put them first
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -27,19 +25,33 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     tesseract-ocr \
     && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
     && ldconfig
 
-# Copy wait-for-postgres.sh into the container, fix line endings, and make it executable
-COPY ./wait-for-postgres.sh /wait-for-postgres.sh
-# Fix Windows line endings (CRLF -> LF)
-RUN sed -i 's/\r$//' /wait-for-postgres.sh && \
-    chmod +x /wait-for-postgres.sh
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
 
-# Make port 5000 available to the world outside this container
-EXPOSE 5000
+# Install Python dependencies
+# Copy only requirements.txt first to leverage Docker cache
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Define the script to run on container start
-ENTRYPOINT ["/wait-for-postgres.sh"]
+# Create non-root user for security
+RUN adduser --disabled-password --gecos "" appuser
 
-# Define the command to run the app using Uvicorn
+# Copy the application code
+# This layer changes frequently, so we put it last
+COPY . .
+
+# Change ownership of the application files
+RUN chown -R appuser:appuser /app
+
+# Switch to non-root user
+USER appuser
+
+# Make port 5000 available
+EXPOSE $PORT
+
+# Run the application
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]

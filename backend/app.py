@@ -1,104 +1,173 @@
-import logging
 import os
+import logging
 from operator import itemgetter
-
-from azure.storage.blob import BlobServiceClient
-from dotenv import find_dotenv, load_dotenv
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query
 from fastapi.middleware.cors import CORSMiddleware
-from langchain_openai import AzureChatOpenAI
+from pydantic import BaseModel, Field
+from azure.search.documents import SearchClient
+from azure.search.documents.indexes import SearchIndexClient
+from azure.search.documents.indexes.models import (
+    ScoringProfile,
+    SearchableField,
+    SearchField,
+    SearchFieldDataType,
+    SimpleField,
+    TextWeights,
+)
+from azure.core.credentials import AzureKeyCredential
 from langchain_openai import AzureOpenAIEmbeddings
-from langchain.indexes import SQLRecordManager, index
+from langchain_community.vectorstores import AzureSearch
 from langchain.prompts import ChatPromptTemplate, PromptTemplate
 from langchain.schema import Document, StrOutputParser, format_document
 from langchain.schema.runnable import RunnableParallel, RunnablePassthrough
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_community.document_loaders import AzureBlobStorageContainerLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_postgres import PGVector
-from pydantic import BaseModel, Field
-from sqlalchemy import create_engine, text
-from sqlalchemy.sql import text
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from typing import Optional
+from langchain.chains import ConversationalRetrievalChain
+from langchain_openai import AzureChatOpenAI
+from azure.storage.blob import BlobServiceClient
+from dotenv import find_dotenv, load_dotenv
+import json
+import sys
 
+# Load environment variables
 load_dotenv(find_dotenv())
 
-logging.basicConfig(level=logging.INFO)
+# Configure logging
+logging.basicConfig(
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler(sys.stdout)]
+)
+
+# Set logging levels for Azure SDK components
+logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
+logging.getLogger("azure.storage").setLevel(logging.WARNING)
+logging.getLogger("azure.search").setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
 
-conn_str = os.getenv("BLOB_CONN_STRING")
-container_name = os.getenv("BLOB_CONTAINER")
-blob_service_client = BlobServiceClient.from_connection_string(conn_str=conn_str)
-# Constants for chunking
+# Environment variables
+AZURE_SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
+AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
+AZURE_SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX")
+AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
+AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
+BLOB_CONN_STRING = os.getenv("BLOB_CONN_STRING")
+BLOB_CONTAINER = os.getenv("BLOB_CONTAINER")
+
+# Construct Azure Search endpoint
+AZURE_SEARCH_SERVICE_ENDPOINT = f"https://{AZURE_SEARCH_SERVICE}.search.windows.net"
+
+# Constants
 CHUNK_SIZE = 5000
 CHUNK_OVERLAP = 200
 
-host = os.getenv("PG_VECTOR_HOST")
-user = os.getenv("PG_VECTOR_USER")
-password = os.getenv("PG_VECTOR_PASSWORD")
-COLLECTION_NAME = os.getenv("PGDATABASE")
-CONNECTION_STRING = (
-    f"postgresql+psycopg2://{user}:{password}@{host}:5432/{COLLECTION_NAME}"
+# Initialize embeddings
+embeddings = AzureOpenAIEmbeddings(model="text-embedding-3-large",dimensions=1536)
+
+embedding_function = embeddings.embed_query
+
+
+# Define fields for Azure Search
+fields = [
+    SimpleField(
+        name="id",
+        type=SearchFieldDataType.String,
+        key=True,
+        filterable=True,
+    ),
+    SearchableField(
+        name="content",
+        type=SearchFieldDataType.String,
+        searchable=True,
+    ),
+    SearchField(
+        name="content_vector",
+        type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
+        searchable=True,
+        vector_search_dimensions=1536,
+        vector_search_profile_name="myHnswProfile",
+    ),
+    SearchableField(
+        name="metadata",
+        type=SearchFieldDataType.String,
+        searchable=True,
+    ),
+    # Additional field to store the title
+    SearchableField(
+        name="title",
+        type=SearchFieldDataType.String,
+        searchable=True,
+    ),
+    # Additional field for filtering on document source
+    SimpleField(
+        name="source",
+        type=SearchFieldDataType.String,
+        filterable=True,
+    ),
+]
+
+index_name: str = os.getenv("AZURE_SEARCH_INDEX")
+
+vector_store: AzureSearch = AzureSearch(
+    azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
+    azure_search_key=AZURE_SEARCH_KEY,
+    index_name=AZURE_SEARCH_INDEX,
+    embedding_function=embedding_function,
+    fields=fields,
 )
 
-namespace = f"pgvector/{COLLECTION_NAME}"
+# Initialize search client for direct operations if needed
+search_client = SearchClient(
+    endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
+    index_name=AZURE_SEARCH_INDEX,
+    credential=AzureKeyCredential(AZURE_SEARCH_KEY)
+)
 
-# Update the record manager initialization
+# Check if index exists and create if it doesn't
 try:
-    record_manager = SQLRecordManager(namespace, db_url=CONNECTION_STRING)
-    record_manager.create_schema()
-    # Verify connection
-    record_manager.list_keys()  # This will test the connection
-    logger.info("Record manager initialized successfully")
+    index_client = SearchIndexClient(
+        endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
+        credential=AzureKeyCredential(AZURE_SEARCH_KEY)
+    )
+    index_client.get_index(AZURE_SEARCH_INDEX)
+    logger.info(f"Index {AZURE_SEARCH_INDEX} already exists")
 except Exception as e:
-    logger.error(f"Failed to initialize record manager: {str(e)}")
-    raise
+    logger.info(f"Index {AZURE_SEARCH_INDEX} does not exist. Creating...")
+    logger.info("Index will be created automatically by Langchain")
 
-embeddings = AzureOpenAIEmbeddings(model="text-embedding-3-large",dimensions="1536")
-
-vector_store = PGVector(
-    embeddings=embeddings,
-    collection_name=COLLECTION_NAME,
-    connection=CONNECTION_STRING,
-    use_jsonb=True,
-)
-retriever = vector_store.as_retriever(search_kwargs={"k": 20})
-
-
+# Pydantic Models
 class Message(BaseModel):
-  role: str  # 'user' or 'bot'
-  content: str
-  id: Optional[int] = None
-
+    role: str
+    content: str
+    id: Optional[int] = None
 
 class Conversation(BaseModel):
     conversation: list[Message]
 
 class ConversationRequest(BaseModel):
-  question: str
-  conversation: Conversation
-
+    question: str
+    conversation: Conversation
 
 class DocumentIn(BaseModel):
     page_content: str
     metadata: dict = Field(default_factory=dict)
 
-class BlobProcessRequest(BaseModel):
-    blob_url: str
-
-
-def _format_chat_history(conversation: list[Message]) -> str:
-    formatted_history = ""
-    for message in conversation:
-        formatted_history += f"{message.role}: {message.content}\n"
-    return formatted_history.rstrip()
-
-
+# Initialize the chat model
 llm = AzureChatOpenAI(
     azure_deployment="gpt-4o-mini",
-    api_version="2023-03-15-preview",
-    temperature=0)
+    openai_api_version="2023-03-15-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_API_KEY,
+    temperature=0.3
+)
+
+# Initialize the retriever from vector store
+retriever = vector_store.as_retriever(
+    search_type="hybrid",
+    search_kwargs={"k": 4}  # Fetch top 4 most relevant documents
+)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
@@ -156,6 +225,16 @@ def _combine_documents(
     return document_separator.join(doc_strings)
 
 
+def _format_chat_history(chat_history):
+    buffer = []
+    for message in chat_history:
+        if message.role == "user":
+            buffer.append(f"Human: {message.content}")
+        elif message.role == "assistant":
+            buffer.append(f"Assistant: {message.content}")
+    return "\n".join(buffer)
+
+
 _inputs = RunnableParallel(
     standalone_question=RunnablePassthrough.assign(
         chat_history=lambda x: _format_chat_history(x["chat_history"])
@@ -169,6 +248,8 @@ _context = {
     "context": itemgetter("standalone_question") | retriever | _combine_documents,
     "question": lambda x: x["standalone_question"],
 }
+
+# Combine the chain components
 conversational_qa_chain = _inputs | _context | ANSWER_PROMPT | llm | StrOutputParser()
 
 app = FastAPI()
@@ -185,27 +266,12 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Initialize Azure Blob Storage client
+blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
 
 @app.get("/test")
 async def test():
     return {"test": "works"}
-
-
-def get_row_count():
-    engine = create_engine(CONNECTION_STRING)
-    with engine.connect() as connection:
-        result = connection.execute(text("SELECT COUNT(*) FROM langchain_pg_embedding"))
-        row_count = result.scalar()
-    return row_count
-
-
-@app.get("/row_count")
-async def row_count():
-    try:
-        count = get_row_count()
-        return {"row_count": count}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/conversation")
@@ -243,7 +309,7 @@ async def list_files(
     page_size: int = Query(10, ge=1, le=100),
 ):
     try:
-        container_client = blob_service_client.get_container_client(container_name)
+        container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
         blob_list = list(container_client.list_blobs())
         
         # Calculate pagination
@@ -271,7 +337,7 @@ async def list_files(
 @app.delete("/deletefile/{filename}")
 async def delete_file(filename: str):
   logger.info(f"Attempting to delete file: {filename}")
-  container_client = blob_service_client.get_container_client(container_name)
+  container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
   blob_client = container_client.get_blob_client(blob=filename)
 
   try:
@@ -290,34 +356,42 @@ async def delete_file(filename: str):
 
 @app.post("/uploadfiles")
 async def upload_files(files: list[UploadFile] = File(...)):
-  # Add size validation
-  MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
-  
-  container_client = blob_service_client.get_container_client(container_name)
-  uploaded_files = []
+    try:
+        # Add size validation
+        MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+        
+        container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+        uploaded_files = []
 
-  for file in files:
-      # Validate file size
-      contents = await file.read()
-      if len(contents) > MAX_FILE_SIZE:
-          raise HTTPException(
-              status_code=413,
-              detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
-          )
-          
-      blob_client = container_client.get_blob_client(blob=file.filename)
-      blob_client.upload_blob(contents, overwrite=True)
-      uploaded_files.append(file.filename)
+        for file in files:
+            # Validate file size
+            contents = await file.read()
+            if len(contents) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
+                )
+                
+            try:
+                blob_client = container_client.get_blob_client(blob=file.filename)
+                blob_client.upload_blob(contents, overwrite=True)
+                uploaded_files.append(file.filename)
+            except Exception as e:
+                logger.error(f"Error uploading file {file.filename}: {str(e)}")
+                raise HTTPException(status_code=500, detail=f"Error uploading file {file.filename}: {str(e)}")
 
-  return {"uploaded_files": uploaded_files}
+        return {"uploaded_files": uploaded_files}
+    except Exception as e:
+        logger.error(f"Error in upload_files: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/process_uploaded_files")
 async def process_uploaded_files():
     try:
         loader = AzureBlobStorageContainerLoader(
-            conn_str=conn_str,
-            container=container_name
+            conn_str=BLOB_CONN_STRING,
+            container=BLOB_CONTAINER
         )
         
         data = loader.load()
@@ -370,41 +444,41 @@ async def process_uploaded_files():
 
 @app.post("/index_documents/")
 async def index_documents(documents_in: list[DocumentIn]):
-    print(documents_in)
+    logging.debug('Starting document indexing process')
     try:
-        documents = [
-            Document(page_content=doc.page_content, metadata=doc.metadata)
-            for doc in documents_in
-        ]
-        result = index(
-            documents,
-            record_manager,
-            vector_store,
-            cleanup="full",
-            source_id_key="source",
-        )
-        return result
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.post("/clear_indexes")
-async def clear_indexes():
-    try:
-        # Get all keys in the current namespace
-        keys = record_manager.list_keys()
-        # Delete all keys
-        if keys:
-            record_manager.delete_keys(keys)
-        
-        # Clear vector store
-        engine = create_engine(CONNECTION_STRING)
-        with engine.connect() as connection:
-            connection.execute(text("TRUNCATE TABLE langchain_pg_embedding"))
-            connection.commit()
+        for document in documents_in:
+            logging.debug('Processing document: %s', document.metadata['source'])
+            # Assuming `get_document_embedding` is a function that generates embeddings
+            try:
+                embedding = embeddings.embed_query(document.page_content)
+                logging.debug('Generated embedding for document: %s', document.metadata['source'])
+            except Exception as e:
+                logging.error('Error generating embedding for document: %s', str(e))
+                continue
             
-        logger.info("Successfully cleared all indexes")
-        return {"message": "All indexes cleared successfully"}
+            # Create a unique ID for each document
+            doc_id = f"doc_{hash(document.page_content)}"
+            
+            # Create the document object
+            document_obj = {
+                "id": doc_id,
+                "content": document.page_content,
+                "content_vector": embedding,
+                "metadata": json.dumps(document.metadata),
+                "source": document.metadata.get("source", "unknown")
+            }
+            
+            # Index document in Azure Search
+            logging.debug('Indexing document into Azure Search: %s', document.metadata['source'])
+            try:
+                result = search_client.upload_documents(documents=[document_obj])
+                logging.debug('Indexed document into Azure Search: %s', document.metadata['source'])
+            except Exception as e:
+                logging.error('Error indexing document: %s', str(e))
+                raise
+            logging.debug('Successfully indexed document: %s', document.metadata['source'])
     except Exception as e:
-        logger.error(f"Error clearing indexes: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logging.error('Error during document indexing: %s', str(e))
+        raise
+    logging.debug('Completed document indexing process')
+    return {"message": f"Successfully indexed {len(documents_in)} documents"}

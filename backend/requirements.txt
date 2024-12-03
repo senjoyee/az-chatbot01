@@ -5,13 +5,12 @@ python-dotenv
 langchain
 langchain-openai
 langchain-community
-langchain-postgres
 langchain-text-splitters
 typing_extensions
 python-multipart
-psycopg2-binary
 azure-storage-blob
+azure-search-documents
+azure-core
 unstructured[all-docs]
+azure-identity
 python-magic
-
-
