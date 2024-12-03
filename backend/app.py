@@ -27,6 +27,9 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain_openai import AzureChatOpenAI
 from azure.storage.blob import BlobServiceClient
 from dotenv import find_dotenv, load_dotenv
+from unstructured.partition.docx import partition_docx
+from unstructured.chunking.title import chunk_by_title
+import tempfile
 import json
 import sys
 
@@ -406,21 +409,67 @@ async def process_uploaded_files(event: BlobEvent):
                 if e.status_code != 404:  # Ignore if no existing chunks found
                     raise
             
-            # Process the new file
-            loader = AzureBlobStorageContainerLoader(
-                conn_str=BLOB_CONN_STRING,
-                container=BLOB_CONTAINER
-            )
+            # Get the specific blob
+            container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+            blob_client = container_client.get_blob_client(event.file_name)
             
-            data = loader.load()
-            logger.info(f"Loaded {len(data)} documents from blob storage")
+            # Determine file type from extension
+            file_extension = event.file_name.lower().split('.')[-1] if '.' in event.file_name else ''
+            logger.info(f"Processing file with extension: {file_extension}")
+
+            # Download the blob content
+            download_stream = blob_client.download_blob()
             
-            text_splitter = RecursiveCharacterTextSplitter(
-                chunk_size=CHUNK_SIZE,
-                chunk_overlap=CHUNK_OVERLAP
-            )
+            if file_extension == 'docx':
+                # For DOCX files, we need to save to a temp file first
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
+                    download_stream.readinto(temp_file)
+                    temp_path = temp_file.name
+                
+                try:
+                    # Process DOCX using unstructured
+                    logger.info(f"Processing DOCX file: {event.file_name}")
+                    elements = partition_docx(filename=temp_path)
+                    logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
+                    
+                    # Chunk the document using title-based chunking
+                    chunks = chunk_by_title(
+                        elements,
+                        max_characters=8000,
+                        new_after_n_chars=6000,
+                    )
+                    logger.info(f"Created {len(chunks)} chunks from DOCX")
+                    
+                    # Convert chunks to documents
+                    split_documents = [
+                        Document(
+                            page_content=str(chunk),
+                            metadata={
+                                "source": event.file_name,
+                                "chunk_type": "docx_chunk"
+                            }
+                        )
+                        for chunk in chunks
+                    ]
+                finally:
+                    # Clean up temp file
+                    os.unlink(temp_path)
+                    
+            else:
+                # For text files, process as before
+                content = await download_stream.content_as_text()
+                doc = Document(
+                    page_content=content,
+                    metadata={"source": event.file_name}
+                )
+                
+                text_splitter = RecursiveCharacterTextSplitter(
+                    chunk_size=CHUNK_SIZE,
+                    chunk_overlap=CHUNK_OVERLAP
+                )
+                
+                split_documents = text_splitter.split_documents([doc])
             
-            split_documents = text_splitter.split_documents(data)
             logger.info(f"Split into {len(split_documents)} chunks")
             
             batch_size = 100
@@ -433,7 +482,8 @@ async def process_uploaded_files(event: BlobEvent):
                         DocumentIn(
                             page_content=str(doc.page_content),
                             metadata={
-                                "source": os.path.basename(str(doc.metadata.get("source", "")))
+                                "source": event.file_name,
+                                **doc.metadata  # Include any additional metadata
                             }
                         )
                         for doc in batch
