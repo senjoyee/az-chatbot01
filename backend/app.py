@@ -33,6 +33,11 @@ from unstructured.chunking.title import chunk_by_title
 import tempfile
 import json
 import sys
+import asyncio
+from enum import Enum
+from datetime import datetime
+from typing import Dict, Optional
+from pydantic import BaseModel
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -43,16 +48,30 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
 
-# Set third-party loggers to WARNING level
-logging.getLogger('pdfminer').setLevel(logging.WARNING)
-logging.getLogger('unstructured').setLevel(logging.WARNING)
-logging.getLogger('detectron2').setLevel(logging.WARNING)
-logging.getLogger('PIL').setLevel(logging.WARNING)
+loggers_config = {
+    # PDF processing
+    'pdfminer': logging.ERROR,
+    'pdfminer.pdfinterp': logging.ERROR,
+    'pdfminer.converter': logging.ERROR,
+    'pdfminer.layout': logging.ERROR,
+    'pdfminer.image': logging.ERROR,
+    
+    # Document processing
+    'unstructured': logging.WARNING,
+    'detectron2': logging.WARNING,
+    'PIL': logging.WARNING,
+    
+    # OCR related
+    'tesseract': logging.INFO,
+    
+    # Azure SDK
+    'azure.core.pipeline.policies.http_logging_policy': logging.WARNING,
+    'azure.identity': logging.WARNING
+}
 
-# Set logging levels for Azure SDK components
-logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
-logging.getLogger("azure.storage").setLevel(logging.WARNING)
-logging.getLogger("azure.search").setLevel(logging.WARNING)
+# Apply logger configurations
+for logger_name, level in loggers_config.items():
+    logging.getLogger(logger_name).setLevel(level)
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +300,41 @@ app.add_middleware(
 # Initialize Azure Blob Storage client
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
 
+# Processing status enum
+class ProcessingStatus(str, Enum):
+    NOT_STARTED = "not_started"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    FAILED = "failed"
+
+# File processing status model
+class FileProcessingStatus(BaseModel):
+    status: ProcessingStatus
+    file_name: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    error_message: Optional[str] = None
+
+# In-memory status tracking (could be replaced with Redis/database in production)
+processing_status: Dict[str, FileProcessingStatus] = {}
+processing_locks: Dict[str, asyncio.Lock] = {}
+
+async def get_file_lock(file_name: str) -> asyncio.Lock:
+    """Get or create a lock for a file"""
+    if file_name not in processing_locks:
+        processing_locks[file_name] = asyncio.Lock()
+    return processing_locks[file_name]
+
+@app.get("/file_status/{file_name}")
+async def get_file_status(file_name: str) -> FileProcessingStatus:
+    """Get the processing status of a file"""
+    if file_name not in processing_status:
+        return FileProcessingStatus(
+            status=ProcessingStatus.NOT_STARTED,
+            file_name=file_name
+        )
+    return processing_status[file_name]
+
 @app.get("/test")
 async def test():
     return {"test": "works"}
@@ -400,27 +454,61 @@ async def upload_files(files: list[UploadFile] = File(...)):
 
 @app.post("/process_uploaded_files")
 async def process_uploaded_files(event: BlobEvent):
-    try:
-        logger.info(f"Processing {event.event_type} event for file: {event.file_name}")
-        
-        if event.event_type == "Microsoft.Storage.BlobDeleted":
-            return await delete_from_vector_store(event.file_name)
+    file_name = event.file_name
+    
+    # Get lock for this file
+    lock = await get_file_lock(file_name)
+    
+    # Try to acquire the lock, return current status if locked
+    if not lock.locked():
+        async with lock:
+            # Check if already being processed
+            current_status = processing_status.get(file_name)
+            if current_status and current_status.status == ProcessingStatus.IN_PROGRESS:
+                return current_status
             
+            # Initialize status
+            status = FileProcessingStatus(
+                status=ProcessingStatus.IN_PROGRESS,
+                file_name=file_name,
+                start_time=datetime.utcnow()
+            )
+            processing_status[file_name] = status
+            
+            # Start processing in background task
+            asyncio.create_task(process_file_async(event))
+            
+            return status
+    else:
+        # File is locked, return current status
+        return processing_status.get(file_name, FileProcessingStatus(
+            status=ProcessingStatus.IN_PROGRESS,
+            file_name=file_name
+        ))
+
+async def process_file_async(event: BlobEvent):
+    """Asynchronous file processing function"""
+    file_name = event.file_name
+    try:
+        if event.event_type == "Microsoft.Storage.BlobDeleted":
+            await delete_from_vector_store(file_name)
+            status = ProcessingStatus.COMPLETED
+        
         elif event.event_type == "Microsoft.Storage.BlobCreated":
             # First, clean up any existing chunks (handles updates)
             try:
-                await delete_from_vector_store(event.file_name)
-                logger.info(f"Cleaned up existing chunks for update: {event.file_name}")
+                await delete_from_vector_store(file_name)
+                logger.info(f"Cleaned up existing chunks for update: {file_name}")
             except HTTPException as e:
                 if e.status_code != 404:  # Ignore if no existing chunks found
                     raise
             
             # Get the specific blob
             container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-            blob_client = container_client.get_blob_client(event.file_name)
+            blob_client = container_client.get_blob_client(file_name)
             
             # Determine file type from extension
-            file_extension = event.file_name.lower().split('.')[-1] if '.' in event.file_name else ''
+            file_extension = file_name.lower().split('.')[-1] if '.' in file_name else ''
             logger.info(f"Processing file with extension: {file_extension}")
 
             # Download the blob content
@@ -434,7 +522,7 @@ async def process_uploaded_files(event: BlobEvent):
                 
                 try:
                     # Process DOCX using unstructured
-                    logger.info(f"Processing DOCX file: {event.file_name}")
+                    logger.info(f"Processing DOCX file: {file_name}")
                     elements = partition_docx(filename=temp_path)
                     logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
                     
@@ -465,7 +553,7 @@ async def process_uploaded_files(event: BlobEvent):
                         
                         # Create metadata dictionary
                         metadata = {
-                            "source": event.file_name,  # Use original filename
+                            "source": file_name,  # Use original filename
                             "page_numbers": list(sorted(page_numbers)) if page_numbers else None,
                             "chunk_index": i,
                             "file_type": "docx",
@@ -474,10 +562,10 @@ async def process_uploaded_files(event: BlobEvent):
                         
                         # Create document object
                         doc = {
-                            'id': f"{sanitize_id(event.file_name)}_{i}",  # Sanitize only the ID
+                            'id': f"{sanitize_id(file_name)}_{i}",  # Sanitize only the ID
                             'content': element.text if hasattr(element, 'text') else str(element),
                             'metadata': json.dumps(metadata),  # Store metadata as JSON string
-                            'source': event.file_name  # Keep original filename
+                            'source': file_name  # Keep original filename
                         }
                         documents.append(doc)
                     
@@ -500,7 +588,7 @@ async def process_uploaded_files(event: BlobEvent):
                 
                 try:
                     # Process PDF using unstructured with high-res and table inference
-                    logger.info(f"Processing PDF file: {event.file_name}")
+                    logger.info(f"Processing PDF file: {file_name}")
                     elements = partition_pdf(
                         filename=temp_path,
                         strategy="hi_res",
@@ -536,7 +624,7 @@ async def process_uploaded_files(event: BlobEvent):
                         
                         # Create metadata dictionary
                         metadata = {
-                            "source": event.file_name,  # Use original filename
+                            "source": file_name,  # Use original filename
                             "page_numbers": list(sorted(page_numbers)) if page_numbers else None,
                             "chunk_index": i,
                             "file_type": "pdf"
@@ -544,10 +632,10 @@ async def process_uploaded_files(event: BlobEvent):
                         
                         # Create document object
                         doc = {
-                            'id': f"{sanitize_id(event.file_name)}_{i}",  # Sanitize only the ID
+                            'id': f"{sanitize_id(file_name)}_{i}",  # Sanitize only the ID
                             'content': element.text if hasattr(element, 'text') else str(element),
                             'metadata': json.dumps(metadata),  # Store metadata as JSON string
-                            'source': event.file_name  # Keep original filename
+                            'source': file_name  # Keep original filename
                         }
                         documents.append(doc)
                     
@@ -568,16 +656,16 @@ async def process_uploaded_files(event: BlobEvent):
                 
                 # Create single document with metadata
                 metadata = {
-                    "source": event.file_name,
+                    "source": file_name,
                     "chunk_index": 0,
                     "file_type": "txt"
                 }
                 
                 doc = {
-                    'id': f"{sanitize_id(event.file_name)}_0",
+                    'id': f"{sanitize_id(file_name)}_0",
                     'content': content,
                     'metadata': json.dumps(metadata),
-                    'source': event.file_name
+                    'source': file_name
                 }
                 
                 # Create initial Document object
@@ -598,7 +686,7 @@ async def process_uploaded_files(event: BlobEvent):
                 
                 for i, chunk_doc in enumerate(temp_docs):
                     chunk_metadata = {
-                        "source": event.file_name,
+                        "source": file_name,
                         "chunk_index": i,
                         "file_type": "txt"
                     }
@@ -640,36 +728,17 @@ async def process_uploaded_files(event: BlobEvent):
             return {"message": f"Unhandled event type: {event.event_type}"}
             
     except Exception as e:
-        logger.error(f"Error processing event: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-def escape_odata_filter_value(value: str) -> str:
-    """
-    Escape a string value for use in OData filter expressions.
-    Handles special characters and follows OData string literal rules.
-    """
-    if not value:
-        return value
-        
-    # First, escape single quotes (OData uses two single quotes for escaping)
-    value = value.replace("'", "''")
+        logger.error(f"Error processing file {file_name}: {str(e)}")
+        status = ProcessingStatus.FAILED
+        error_message = str(e)
     
-    # List of characters that might need to be percent-encoded
-    special_chars = {
-        '#': '%23',
-        '%': '%25',
-        '+': '%2B',
-        '?': '%3F',
-        '\\': '%5C',
-        '&': '%26'
-    }
-    
-    # Replace special characters with their percent-encoded values
-    for char, encoded in special_chars.items():
-        value = value.replace(char, encoded)
-    
-    return value
+    finally:
+        # Update status
+        if file_name in processing_status:
+            processing_status[file_name].status = status
+            processing_status[file_name].end_time = datetime.utcnow()
+            if status == ProcessingStatus.FAILED:
+                processing_status[file_name].error_message = error_message
 
 
 async def delete_from_vector_store(filename: str) -> dict:
@@ -742,6 +811,34 @@ async def index_documents(documents_in: list[DocumentIn]):
         raise
     logger.info(f"Completed indexing process. Successfully indexed {len(documents_in)} documents")
     return {"message": f"Successfully indexed {len(documents_in)} documents"}
+
+def escape_odata_filter_value(value: str) -> str:
+    """
+    Escape a string value for use in OData filter expressions.
+    Handles special characters and follows OData string literal rules.
+    """
+    if not value:
+        return value
+        
+    # First, escape single quotes (OData uses two single quotes for escaping)
+    value = value.replace("'", "''")
+    
+    # List of characters that might need to be percent-encoded
+    special_chars = {
+        '#': '%23',
+        '%': '%25',
+        '+': '%2B',
+        '?': '%3F',
+        '\\': '%5C',
+        '&': '%26'
+    }
+    
+    # Replace special characters with their percent-encoded values
+    for char, encoded in special_chars.items():
+        value = value.replace(char, encoded)
+    
+    return value
+
 
 def sanitize_id(filename: str) -> str:
     """
