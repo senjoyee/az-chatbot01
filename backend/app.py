@@ -28,6 +28,7 @@ from langchain_openai import AzureChatOpenAI
 from azure.storage.blob import BlobServiceClient
 from dotenv import find_dotenv, load_dotenv
 from unstructured.partition.docx import partition_docx
+from unstructured.partition.pdf import partition_pdf
 from unstructured.chunking.title import chunk_by_title
 import tempfile
 import json
@@ -38,10 +39,15 @@ load_dotenv(find_dotenv())
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
+# Set third-party loggers to WARNING level
+logging.getLogger('pdfminer').setLevel(logging.WARNING)
+logging.getLogger('unstructured').setLevel(logging.WARNING)
+logging.getLogger('detectron2').setLevel(logging.WARNING)
+logging.getLogger('PIL').setLevel(logging.WARNING)
 
 # Set logging levels for Azure SDK components
 logging.getLogger("azure.core.pipeline.policies.http_logging_policy").setLevel(logging.WARNING)
@@ -249,7 +255,7 @@ _context = {
     "context": lambda x: _combine_documents(
         vector_store.hybrid_search(
             x["standalone_question"],
-            k=4
+            k=10
         )
     ),
     "question": lambda x: x["standalone_question"],
@@ -441,15 +447,116 @@ async def process_uploaded_files(event: BlobEvent):
                     logger.info(f"Created {len(chunks)} chunks from DOCX")
                     
                     # Convert chunks to documents
+                    documents = []
+                    for i, element in enumerate(chunks):
+                        # Extract metadata safely
+                        page_numbers = set()
+                        if hasattr(element, 'metadata'):
+                            metadata_obj = element.metadata
+                            # Handle ElementMetadata object
+                            if hasattr(metadata_obj, 'page_number'):
+                                page_num = metadata_obj.page_number
+                                if page_num is not None:
+                                    page_numbers.add(page_num)
+                            elif hasattr(metadata_obj, '__dict__'):
+                                page_num = metadata_obj.__dict__.get('page_number')
+                                if page_num is not None:
+                                    page_numbers.add(page_num)
+                        
+                        # Create metadata dictionary
+                        metadata = {
+                            "source": event.file_name,  # Use original filename
+                            "page_numbers": list(sorted(page_numbers)) if page_numbers else None,
+                            "chunk_index": i,
+                            "file_type": "docx",
+                            "chunk_type": "docx_chunk"
+                        }
+                        
+                        # Create document object
+                        doc = {
+                            'id': f"{sanitize_id(event.file_name)}_{i}",  # Sanitize only the ID
+                            'content': element.text if hasattr(element, 'text') else str(element),
+                            'metadata': json.dumps(metadata),  # Store metadata as JSON string
+                            'source': event.file_name  # Keep original filename
+                        }
+                        documents.append(doc)
+                    
+                    # Convert to Document objects
                     split_documents = [
                         Document(
-                            page_content=str(chunk),
-                            metadata={
-                                "source": event.file_name,
-                                "chunk_type": "docx_chunk"
-                            }
-                        )
-                        for chunk in chunks
+                            page_content=doc['content'],
+                            metadata=json.loads(doc['metadata'])
+                        ) for doc in documents
+                    ]
+                finally:
+                    # Clean up temp file
+                    os.unlink(temp_path)
+                    
+            elif file_extension == 'pdf':
+                # For PDF files, we need to save to a temp file first
+                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                    download_stream.readinto(temp_file)
+                    temp_path = temp_file.name
+                
+                try:
+                    # Process PDF using unstructured with high-res and table inference
+                    logger.info(f"Processing PDF file: {event.file_name}")
+                    elements = partition_pdf(
+                        filename=temp_path,
+                        strategy="hi_res",
+                        infer_table_structure=True,
+                        include_metadata=True
+                    )
+                    logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
+                    
+                    # Chunk the document using title-based chunking
+                    chunks = chunk_by_title(
+                        elements,
+                        max_characters=8000,
+                        new_after_n_chars=6000,
+                    )
+                    logger.info(f"Created {len(chunks)} chunks from PDF")
+                    
+                    # Convert chunks to documents with page numbers
+                    documents = []
+                    for i, element in enumerate(chunks):
+                        # Extract metadata safely
+                        page_numbers = set()
+                        if hasattr(element, 'metadata'):
+                            metadata_obj = element.metadata
+                            # Handle ElementMetadata object
+                            if hasattr(metadata_obj, 'page_number'):
+                                page_num = metadata_obj.page_number
+                                if page_num is not None:
+                                    page_numbers.add(page_num)
+                            elif hasattr(metadata_obj, '__dict__'):
+                                page_num = metadata_obj.__dict__.get('page_number')
+                                if page_num is not None:
+                                    page_numbers.add(page_num)
+                        
+                        # Create metadata dictionary
+                        metadata = {
+                            "source": event.file_name,  # Use original filename
+                            "page_numbers": list(sorted(page_numbers)) if page_numbers else None,
+                            "chunk_index": i,
+                            "file_type": "pdf"
+                        }
+                        
+                        # Create document object
+                        doc = {
+                            'id': f"{sanitize_id(event.file_name)}_{i}",  # Sanitize only the ID
+                            'content': element.text if hasattr(element, 'text') else str(element),
+                            'metadata': json.dumps(metadata),  # Store metadata as JSON string
+                            'source': event.file_name  # Keep original filename
+                        }
+                        documents.append(doc)
+                    
+                    # Convert to Document objects
+                    split_documents = [
+                        Document(
+                            page_content=doc['content'],
+                            metadata=json.loads(doc['metadata'])
+                        ) for doc in documents
                     ]
                 finally:
                     # Clean up temp file
@@ -458,17 +565,47 @@ async def process_uploaded_files(event: BlobEvent):
             else:
                 # For text files, process as before
                 content = await download_stream.content_as_text()
-                doc = Document(
-                    page_content=content,
-                    metadata={"source": event.file_name}
+                
+                # Create single document with metadata
+                metadata = {
+                    "source": event.file_name,
+                    "chunk_index": 0,
+                    "file_type": "txt"
+                }
+                
+                doc = {
+                    'id': f"{sanitize_id(event.file_name)}_0",
+                    'content': content,
+                    'metadata': json.dumps(metadata),
+                    'source': event.file_name
+                }
+                
+                # Create initial Document object
+                initial_doc = Document(
+                    page_content=doc['content'],
+                    metadata=json.loads(doc['metadata'])
                 )
                 
+                # Split the document
                 text_splitter = RecursiveCharacterTextSplitter(
                     chunk_size=CHUNK_SIZE,
                     chunk_overlap=CHUNK_OVERLAP
                 )
                 
-                split_documents = text_splitter.split_documents([doc])
+                # Split and update metadata for each chunk
+                temp_docs = text_splitter.split_documents([initial_doc])
+                split_documents = []
+                
+                for i, chunk_doc in enumerate(temp_docs):
+                    chunk_metadata = {
+                        "source": event.file_name,
+                        "chunk_index": i,
+                        "file_type": "txt"
+                    }
+                    split_documents.append(Document(
+                        page_content=chunk_doc.page_content,
+                        metadata=chunk_metadata
+                    ))
             
             logger.info(f"Split into {len(split_documents)} chunks")
             
@@ -482,7 +619,7 @@ async def process_uploaded_files(event: BlobEvent):
                         DocumentIn(
                             page_content=str(doc.page_content),
                             metadata={
-                                "source": event.file_name,
+                                "source": doc.metadata.get("source", "unknown"),
                                 **doc.metadata  # Include any additional metadata
                             }
                         )
@@ -507,16 +644,48 @@ async def process_uploaded_files(event: BlobEvent):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+def escape_odata_filter_value(value: str) -> str:
+    """
+    Escape a string value for use in OData filter expressions.
+    Handles special characters and follows OData string literal rules.
+    """
+    if not value:
+        return value
+        
+    # First, escape single quotes (OData uses two single quotes for escaping)
+    value = value.replace("'", "''")
+    
+    # List of characters that might need to be percent-encoded
+    special_chars = {
+        '#': '%23',
+        '%': '%25',
+        '+': '%2B',
+        '?': '%3F',
+        '\\': '%5C',
+        '&': '%26'
+    }
+    
+    # Replace special characters with their percent-encoded values
+    for char, encoded in special_chars.items():
+        value = value.replace(char, encoded)
+    
+    return value
+
+
 async def delete_from_vector_store(filename: str) -> dict:
     """
     Delete all document chunks associated with a specific file from the vector store.
     """
     try:
         logger.info(f"Starting deletion process for file: {filename}")
-        logger.info(f"Searching for documents with source: {filename}")
+        
+        # Escape filename for OData filter
+        escaped_filename = escape_odata_filter_value(filename)
+        logger.info(f"Searching for documents with escaped source: {escaped_filename}")
+        
         documents_to_delete = search_client.search(
             search_text="",
-            filter=f"source eq '{filename}'"
+            filter=f"source eq '{escaped_filename}'"
         )
         
         deleted_count = 0
@@ -573,3 +742,17 @@ async def index_documents(documents_in: list[DocumentIn]):
         raise
     logger.info(f"Completed indexing process. Successfully indexed {len(documents_in)} documents")
     return {"message": f"Successfully indexed {len(documents_in)} documents"}
+
+def sanitize_id(filename: str) -> str:
+    """
+    Sanitize filename to create a valid Azure Search ID.
+    Only keeps alphanumeric chars and underscores, replacing others with dashes.
+    Also removes file extensions.
+    """
+    # Remove file extensions (handles multiple extensions like .docx.pdf)
+    base_name = filename.split('.')[0]
+    # Replace any non-alphanumeric chars (except underscore) with dash
+    sanitized = ''.join(c if c.isalnum() or c == '_' else '-' for c in base_name)
+    # Remove any duplicate dashes
+    sanitized = '-'.join(filter(None, sanitized.split('-')))
+    return sanitized
