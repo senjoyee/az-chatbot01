@@ -54,23 +54,23 @@ logging.basicConfig(
 
 loggers_config = {
     # PDF processing
-    'pdfminer': logging.ERROR,
-    'pdfminer.pdfinterp': logging.ERROR,
-    'pdfminer.converter': logging.ERROR,
-    'pdfminer.layout': logging.ERROR,
-    'pdfminer.image': logging.ERROR,
+    'pdfminer': logging.INFO,
+    'pdfminer.pdfinterp': logging.INFO,
+    'pdfminer.converter': logging.INFO,
+    'pdfminer.layout': logging.INFO,
+    'pdfminer.image': logging.INFO,
     
     # Document processing
-    'unstructured': logging.WARNING,
-    'detectron2': logging.WARNING,
-    'PIL': logging.WARNING,
+    'unstructured': logging.INFO,
+    'detectron2': logging.INFO,
+    'PIL': logging.INFO,
     
     # OCR related
     'tesseract': logging.INFO,
     
     # Azure SDK
-    'azure.core.pipeline.policies.http_logging_policy': logging.WARNING,
-    'azure.identity': logging.WARNING
+    'azure.core.pipeline.policies.http_logging_policy': logging.INFO,
+    'azure.identity': logging.INFO
 }
 
 # Apply logger configurations
@@ -330,6 +330,40 @@ async def get_file_status(file_name: str) -> FileProcessingStatus:
         error_message=error_message
     )
 
+@app.get("/file_statuses")
+async def get_file_statuses(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100),
+    status_filter: Optional[ProcessingStatus] = None
+):
+    """
+    Get all file processing statuses with pagination and optional status filtering.
+    """
+    try:
+        # Get all statuses
+        all_statuses = await storage_manager.get_all_statuses(status_filter)
+        
+        # Sort by last_updated in descending order
+        all_statuses.sort(key=lambda x: x["last_updated"], reverse=True)
+        
+        # Calculate pagination
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        # Get paginated results
+        paginated_statuses = all_statuses[start_idx:end_idx]
+        
+        return {
+            "total": len(all_statuses),
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (len(all_statuses) + page_size - 1) // page_size,
+            "statuses": paginated_statuses
+        }
+    except Exception as e:
+        logger.error(f"Error getting file statuses: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.post("/conversation")
 async def ask_question(request: ConversationRequest) -> dict:
   try:
@@ -392,22 +426,36 @@ async def list_files(
 
 @app.delete("/deletefile/{filename}")
 async def delete_file(filename: str):
-  logger.info(f"Attempting to delete file: {filename}")
-  container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-  blob_client = container_client.get_blob_client(blob=filename)
+    logger.info(f"Attempting to delete file: {filename}")
+    container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+    blob_client = container_client.get_blob_client(blob=filename)
 
-  try:
-      # Check if blob exists first
-      if not blob_client.exists():
-          logger.error(f"File {filename} not found")
-          raise HTTPException(status_code=404, detail=f"File {filename} not found")
-          
-      blob_client.delete_blob()
-      logger.info(f"Successfully deleted file: {filename}")
-      return {"message": f"File {filename} deleted successfully"}
-  except Exception as e:
-      logger.error(f"Error deleting file {filename}: {str(e)}")
-      raise HTTPException(status_code=500, detail=str(e))
+    try:
+        # Check if blob exists first
+        if not blob_client.exists():
+            logger.error(f"File {filename} not found")
+            raise HTTPException(status_code=404, detail=f"File {filename} not found")
+            
+        # First delete from vector store to maintain data consistency
+        logger.info(f"Deleting chunks from vector store for file: {filename}")
+        deletion_result = await delete_from_vector_store(filename)
+        logger.info(f"Vector store deletion result: {deletion_result}")
+        
+        # Then delete the blob
+        blob_client.delete_blob()
+        logger.info(f"Successfully deleted file: {filename}")
+        
+        # Also delete the file status
+        await storage_manager.delete_status(filename)
+        logger.info(f"Successfully deleted status for file: {filename}")
+        
+        return {
+            "message": f"File {filename} and its {deletion_result['deleted_count']} chunks deleted successfully",
+            "deleted_count": deletion_result['deleted_count']
+        }
+    except Exception as e:
+        logger.error(f"Error deleting file {filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/uploadfiles")
@@ -504,9 +552,7 @@ async def process_file_async(event: BlobEvent):
                     if file_extension == '.pdf':
                         elements = partition_pdf(
                             filename=temp_file_path,
-                            strategy="hi_res",
-                            infer_table_structure=True,
-                            include_metadata=True
+                            strategy="fast"
                         )
                         logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
                     elif file_extension in ['.doc', '.docx']:

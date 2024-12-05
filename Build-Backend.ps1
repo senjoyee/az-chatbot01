@@ -27,6 +27,14 @@ try {
         throw "Docker push failed"
     }
     Write-Host "Docker image pushed successfully" -ForegroundColor Green
+
+    # Restart the Azure Web App
+    Write-Host "Restarting Azure Web App..." -ForegroundColor Green
+    az webapp restart --name jscbbackend01 --resource-group js-sapservices-tools
+    if ($LASTEXITCODE -ne 0) {
+        throw "Web app restart failed"
+    }
+    Write-Host "Web app restarted successfully" -ForegroundColor Green
 } catch {
     Write-Host "An error occurred: $_" -ForegroundColor Red
     exit 1

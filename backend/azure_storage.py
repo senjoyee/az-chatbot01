@@ -109,6 +109,48 @@ class AzureStorageManager:
             logger.error(f"Error resetting status for {file_name}: {str(e)}")
             raise
 
+    async def delete_status(self, file_name: str):
+        """Delete the processing status entry for a file."""
+        try:
+            self.table_client.delete_entity(partition_key="FileStatus", row_key=file_name)
+            logger.info(f"Deleted status entry for file {file_name}")
+        except Exception as e:
+            # If the entity doesn't exist, that's fine
+            if "ResourceNotFound" in str(e):
+                logger.info(f"No status entry found for file {file_name}")
+                return
+            logger.error(f"Error deleting status for {file_name}: {str(e)}")
+            raise
+
+    async def get_all_statuses(self, status_filter: Optional[ProcessingStatus] = None) -> list[dict]:
+        """Get all file processing statuses with optional filtering."""
+        try:
+            # Build filter query if status filter is provided
+            filter_query = f"PartitionKey eq 'FileStatus'"
+            if status_filter:
+                filter_query += f" and Status eq '{status_filter.value}'"
+            
+            # Query table
+            entities = self.table_client.query_entities(filter_query)
+            
+            # Convert to list and format timestamps
+            results = []
+            for entity in entities:
+                status_entry = {
+                    "file_name": entity["RowKey"],
+                    "status": entity["Status"],
+                    "last_updated": entity["LastUpdated"],
+                    "error_message": entity.get("ErrorMessage", ""),
+                    "start_time": entity.get("StartTime"),
+                    "end_time": entity.get("EndTime")
+                }
+                results.append(status_entry)
+            
+            return results
+        except Exception as e:
+            logger.error(f"Error getting file statuses: {str(e)}")
+            raise
+
     async def download_file(self, file_name: str, container_name: str = None) -> str:
         """
         Download a blob to a temporary file and return the file path.
