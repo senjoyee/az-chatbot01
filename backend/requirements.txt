@@ -14,3 +14,4 @@ azure-core
 unstructured[all-docs]
 azure-identity
 python-magic
+azure-data-tables

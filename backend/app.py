@@ -38,6 +38,7 @@ from enum import Enum
 from datetime import datetime
 from typing import Dict, Optional
 from pydantic import BaseModel
+from azure_storage import AzureStorageManager, ProcessingStatus
 
 # Load environment variables
 load_dotenv(find_dotenv())
@@ -45,7 +46,10 @@ load_dotenv(find_dotenv())
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)  # Log to stdout for Azure App Service
+    ]
 )
 
 loggers_config = {
@@ -72,6 +76,10 @@ loggers_config = {
 # Apply logger configurations
 for logger_name, level in loggers_config.items():
     logging.getLogger(logger_name).setLevel(level)
+    # Ensure each logger also logs to stdout
+    logger_instance = logging.getLogger(logger_name)
+    if not logger_instance.handlers:
+        logger_instance.addHandler(logging.StreamHandler(sys.stdout))
 
 logger = logging.getLogger(__name__)
 
@@ -86,10 +94,6 @@ BLOB_CONTAINER = os.getenv("BLOB_CONTAINER")
 
 # Construct Azure Search endpoint
 AZURE_SEARCH_SERVICE_ENDPOINT = f"https://{AZURE_SEARCH_SERVICE}.search.windows.net"
-
-# Constants
-CHUNK_SIZE = 5000
-CHUNK_OVERLAP = 200
 
 # Initialize embeddings
 embeddings = AzureOpenAIEmbeddings(model="text-embedding-3-large",dimensions=1536)
@@ -145,6 +149,10 @@ vector_store: AzureSearch = AzureSearch(
     embedding_function=embedding_function,
     fields=fields,
 )
+
+# Initialize services
+storage_manager = AzureStorageManager()
+blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
 
 # Initialize search client for direct operations if needed
 search_client = SearchClient(
@@ -297,9 +305,6 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
-# Initialize Azure Blob Storage client
-blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
-
 # Processing status enum
 class ProcessingStatus(str, Enum):
     NOT_STARTED = "not_started"
@@ -315,30 +320,15 @@ class FileProcessingStatus(BaseModel):
     end_time: Optional[datetime] = None
     error_message: Optional[str] = None
 
-# In-memory status tracking (could be replaced with Redis/database in production)
-processing_status: Dict[str, FileProcessingStatus] = {}
-processing_locks: Dict[str, asyncio.Lock] = {}
-
-async def get_file_lock(file_name: str) -> asyncio.Lock:
-    """Get or create a lock for a file"""
-    if file_name not in processing_locks:
-        processing_locks[file_name] = asyncio.Lock()
-    return processing_locks[file_name]
-
 @app.get("/file_status/{file_name}")
 async def get_file_status(file_name: str) -> FileProcessingStatus:
     """Get the processing status of a file"""
-    if file_name not in processing_status:
-        return FileProcessingStatus(
-            status=ProcessingStatus.NOT_STARTED,
-            file_name=file_name
-        )
-    return processing_status[file_name]
-
-@app.get("/test")
-async def test():
-    return {"test": "works"}
-
+    status, error_message = await storage_manager.get_status(file_name)
+    return FileProcessingStatus(
+        status=status,
+        file_name=file_name,
+        error_message=error_message
+    )
 
 @app.post("/conversation")
 async def ask_question(request: ConversationRequest) -> dict:
@@ -455,291 +445,150 @@ async def upload_files(files: list[UploadFile] = File(...)):
 @app.post("/process_uploaded_files")
 async def process_uploaded_files(event: BlobEvent):
     file_name = event.file_name
+    container_name = "uploads"  # Replace with your container name
     
-    # Get lock for this file
-    lock = await get_file_lock(file_name)
-    
-    # Try to acquire the lock, return current status if locked
-    if not lock.locked():
-        async with lock:
-            # Check if already being processed
-            current_status = processing_status.get(file_name)
-            if current_status and current_status.status == ProcessingStatus.IN_PROGRESS:
-                return current_status
-            
-            # Initialize status
-            status = FileProcessingStatus(
-                status=ProcessingStatus.IN_PROGRESS,
-                file_name=file_name,
-                start_time=datetime.utcnow()
-            )
-            processing_status[file_name] = status
-            
-            # Start processing in background task
-            asyncio.create_task(process_file_async(event))
-            
-            return status
-    else:
-        # File is locked, return current status
-        return processing_status.get(file_name, FileProcessingStatus(
+    # Check if we can process this file
+    can_process, error_message = await storage_manager.check_and_acquire_processing_lock(container_name, file_name)
+    if not can_process:
+        return FileProcessingStatus(
             status=ProcessingStatus.IN_PROGRESS,
-            file_name=file_name
-        ))
+            file_name=file_name,
+            error_message=error_message
+        )
+    
+    try:
+        # Start processing in background task
+        asyncio.create_task(process_file_async(event))
+        
+        return FileProcessingStatus(
+            status=ProcessingStatus.IN_PROGRESS,
+            file_name=file_name,
+            start_time=datetime.utcnow()
+        )
+    except Exception as e:
+        # Update status on error
+        await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
+        raise HTTPException(status_code=500, detail=str(e))
 
 async def process_file_async(event: BlobEvent):
     """Asynchronous file processing function"""
     file_name = event.file_name
+    logger.info(f"Starting processing for file: {file_name}")
+    
     try:
         if event.event_type == "Microsoft.Storage.BlobDeleted":
+            logger.info(f"Processing delete event for file: {file_name}")
             await delete_from_vector_store(file_name)
-            status = ProcessingStatus.COMPLETED
+            await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
+            logger.info(f"Successfully processed delete event for file: {file_name}")
         
         elif event.event_type == "Microsoft.Storage.BlobCreated":
-            # First, clean up any existing chunks (handles updates)
+            # First, check if we need to clean up existing chunks
             try:
                 await delete_from_vector_store(file_name)
-                logger.info(f"Cleaned up existing chunks for update: {file_name}")
-            except HTTPException as e:
-                if e.status_code != 404:  # Ignore if no existing chunks found
-                    raise
+                logger.info(f"Cleaned up existing chunks for {file_name}")
+            except Exception as e:
+                logger.warning(f"Error cleaning up existing chunks: {str(e)}")
             
-            # Get the specific blob
-            container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-            blob_client = container_client.get_blob_client(file_name)
-            
-            # Determine file type from extension
-            file_extension = file_name.lower().split('.')[-1] if '.' in file_name else ''
-            logger.info(f"Processing file with extension: {file_extension}")
-
-            # Download the blob content
-            download_stream = blob_client.download_blob()
-            
-            if file_extension == 'docx':
-                # For DOCX files, we need to save to a temp file first
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.docx') as temp_file:
-                    download_stream.readinto(temp_file)
-                    temp_path = temp_file.name
+            try:
+                # Download the file
+                logger.info(f"Downloading file: {file_name}")
+                temp_file_path = await storage_manager.download_file(file_name)
+                logger.info(f"Successfully downloaded file: {file_name}")
                 
                 try:
-                    # Process DOCX using unstructured
-                    logger.info(f"Processing DOCX file: {file_name}")
-                    elements = partition_docx(filename=temp_path)
-                    logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
+                    # Process the file
+                    file_extension = os.path.splitext(file_name)[1].lower()
+                    logger.info(f"Processing {file_extension} file: {file_name}")
+                    
+                    if file_extension == '.pdf':
+                        elements = partition_pdf(
+                            filename=temp_file_path,
+                            strategy="hi_res",
+                            infer_table_structure=True,
+                            include_metadata=True
+                        )
+                        logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
+                    elif file_extension in ['.doc', '.docx']:
+                        elements = partition_docx(
+                            filename=temp_file_path
+                        )
+                        logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
+                    else:
+                        raise ValueError(f"Unsupported file type: {file_extension}")
                     
                     # Chunk the document using title-based chunking
                     chunks = chunk_by_title(
                         elements,
-                        max_characters=8000,
-                        new_after_n_chars=6000,
+                        max_characters=6000,
+                        new_after_n_chars=5000,
                     )
-                    logger.info(f"Created {len(chunks)} chunks from DOCX")
+                    logger.info(f"Created {len(chunks)} chunks from {file_name}")
                     
                     # Convert chunks to documents
                     documents = []
-                    for i, element in enumerate(chunks):
-                        # Extract metadata safely
-                        page_numbers = set()
-                        if hasattr(element, 'metadata'):
-                            metadata_obj = element.metadata
-                            # Handle ElementMetadata object
-                            if hasattr(metadata_obj, 'page_number'):
-                                page_num = metadata_obj.page_number
-                                if page_num is not None:
-                                    page_numbers.add(page_num)
-                            elif hasattr(metadata_obj, '__dict__'):
-                                page_num = metadata_obj.__dict__.get('page_number')
-                                if page_num is not None:
-                                    page_numbers.add(page_num)
-                        
-                        # Create metadata dictionary
-                        metadata = {
-                            "source": file_name,  # Use original filename
-                            "page_numbers": list(sorted(page_numbers)) if page_numbers else None,
-                            "chunk_index": i,
-                            "file_type": "docx",
-                            "chunk_type": "docx_chunk"
-                        }
-                        
-                        # Create document object
-                        doc = {
-                            'id': f"{sanitize_id(file_name)}_{i}",  # Sanitize only the ID
-                            'content': element.text if hasattr(element, 'text') else str(element),
-                            'metadata': json.dumps(metadata),  # Store metadata as JSON string
-                            'source': file_name  # Keep original filename
-                        }
-                        documents.append(doc)
-                    
-                    # Convert to Document objects
-                    split_documents = [
-                        Document(
-                            page_content=doc['content'],
-                            metadata=json.loads(doc['metadata'])
-                        ) for doc in documents
-                    ]
-                finally:
-                    # Clean up temp file
-                    os.unlink(temp_path)
-                    
-            elif file_extension == 'pdf':
-                # For PDF files, we need to save to a temp file first
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
-                    download_stream.readinto(temp_file)
-                    temp_path = temp_file.name
-                
-                try:
-                    # Process PDF using unstructured with high-res and table inference
-                    logger.info(f"Processing PDF file: {file_name}")
-                    elements = partition_pdf(
-                        filename=temp_path,
-                        strategy="hi_res",
-                        infer_table_structure=True,
-                        include_metadata=True
-                    )
-                    logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
-                    
-                    # Chunk the document using title-based chunking
-                    chunks = chunk_by_title(
-                        elements,
-                        max_characters=8000,
-                        new_after_n_chars=6000,
-                    )
-                    logger.info(f"Created {len(chunks)} chunks from PDF")
-                    
-                    # Convert chunks to documents with page numbers
-                    documents = []
-                    for i, element in enumerate(chunks):
-                        # Extract metadata safely
-                        page_numbers = set()
-                        if hasattr(element, 'metadata'):
-                            metadata_obj = element.metadata
-                            # Handle ElementMetadata object
-                            if hasattr(metadata_obj, 'page_number'):
-                                page_num = metadata_obj.page_number
-                                if page_num is not None:
-                                    page_numbers.add(page_num)
-                            elif hasattr(metadata_obj, '__dict__'):
-                                page_num = metadata_obj.__dict__.get('page_number')
-                                if page_num is not None:
-                                    page_numbers.add(page_num)
-                        
-                        # Create metadata dictionary
-                        metadata = {
-                            "source": file_name,  # Use original filename
-                            "page_numbers": list(sorted(page_numbers)) if page_numbers else None,
-                            "chunk_index": i,
-                            "file_type": "pdf"
-                        }
-                        
-                        # Create document object
-                        doc = {
-                            'id': f"{sanitize_id(file_name)}_{i}",  # Sanitize only the ID
-                            'content': element.text if hasattr(element, 'text') else str(element),
-                            'metadata': json.dumps(metadata),  # Store metadata as JSON string
-                            'source': file_name  # Keep original filename
-                        }
-                        documents.append(doc)
-                    
-                    # Convert to Document objects
-                    split_documents = [
-                        Document(
-                            page_content=doc['content'],
-                            metadata=json.loads(doc['metadata'])
-                        ) for doc in documents
-                    ]
-                finally:
-                    # Clean up temp file
-                    os.unlink(temp_path)
-                    
-            else:
-                # For text files, process as before
-                content = await download_stream.content_as_text()
-                
-                # Create single document with metadata
-                metadata = {
-                    "source": file_name,
-                    "chunk_index": 0,
-                    "file_type": "txt"
-                }
-                
-                doc = {
-                    'id': f"{sanitize_id(file_name)}_0",
-                    'content': content,
-                    'metadata': json.dumps(metadata),
-                    'source': file_name
-                }
-                
-                # Create initial Document object
-                initial_doc = Document(
-                    page_content=doc['content'],
-                    metadata=json.loads(doc['metadata'])
-                )
-                
-                # Split the document
-                text_splitter = RecursiveCharacterTextSplitter(
-                    chunk_size=CHUNK_SIZE,
-                    chunk_overlap=CHUNK_OVERLAP
-                )
-                
-                # Split and update metadata for each chunk
-                temp_docs = text_splitter.split_documents([initial_doc])
-                split_documents = []
-                
-                for i, chunk_doc in enumerate(temp_docs):
-                    chunk_metadata = {
-                        "source": file_name,
-                        "chunk_index": i,
-                        "file_type": "txt"
-                    }
-                    split_documents.append(Document(
-                        page_content=chunk_doc.page_content,
-                        metadata=chunk_metadata
-                    ))
-            
-            logger.info(f"Split into {len(split_documents)} chunks")
-            
-            batch_size = 100
-            total_processed = 0
-            
-            if len(split_documents) > 0:
-                for i in range(0, len(split_documents), batch_size):
-                    batch = split_documents[i:i + batch_size]
-                    documents_in = [
-                        DocumentIn(
-                            page_content=str(doc.page_content),
-                            metadata={
-                                "source": doc.metadata.get("source", "unknown"),
-                                **doc.metadata  # Include any additional metadata
+                    base_id = sanitize_id(file_name)
+                    logger.info(f"Converting chunks to documents for {file_name}")
+                    for i, chunk in enumerate(chunks):
+                        if hasattr(chunk, 'text') and chunk.text.strip():
+                            # Get metadata
+                            metadata = {
+                                "source": file_name
                             }
-                        )
-                        for doc in batch
-                    ]
+                            if hasattr(chunk, 'metadata'):
+                                element_metadata = chunk.metadata.__dict__ if hasattr(chunk.metadata, '__dict__') else chunk.metadata
+                                metadata.update(element_metadata)
+                            
+                            # Extract page numbers
+                            page_numbers = set()
+                            if hasattr(metadata, 'page_number'):
+                                page_num = metadata.page_number
+                                if page_num is not None:
+                                    page_numbers.add(page_num)
+                            elif isinstance(metadata, dict) and 'page_number' in metadata:
+                                page_num = metadata['page_number']
+                                if page_num is not None:
+                                    page_numbers.add(page_num)
+                            
+                            metadata["page_numbers"] = list(sorted(page_numbers)) if page_numbers else None
+                            
+                            # Serialize metadata to ensure JSON compatibility
+                            serialized_metadata = serialize_metadata(metadata)
+                            
+                            doc = DocumentIn(
+                                page_content=chunk.text,
+                                metadata=serialized_metadata
+                            )
+                            documents.append(doc)
                     
-                    await index_documents(documents_in)
-                    total_processed += len(batch)
-                    logger.info(f"Processed {total_processed}/{len(split_documents)} documents")
+                    logger.info(f"Created {len(documents)} documents from chunks for {file_name}")
+                    
+                    # Index the documents
+                    logger.info(f"Starting indexing for {len(documents)} documents from {file_name}")
+                    await index_documents(documents)
+                    logger.info(f"Successfully indexed {len(documents)} documents from {file_name}")
+                    await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
+                    logger.info(f"Completed processing file: {file_name}")
+                except Exception as e:
+                    logger.error(f"Error processing file {file_name}: {str(e)}")
+                    await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
+                    raise
+                finally:
+                    # Clean up temp file
+                    if temp_file_path:
+                        try:
+                            os.unlink(temp_file_path)
+                        except Exception as e:
+                            logger.warning(f"Error cleaning up temp file: {str(e)}")
             
-            return {
-                "message": "Documents processed successfully",
-                "document_count": len(split_documents),
-                "total_processed": total_processed
-            }
-        else:
-            logger.warning(f"Unhandled event type: {event.event_type}")
-            return {"message": f"Unhandled event type: {event.event_type}"}
+            except Exception as e:
+                logger.error(f"Error downloading file {file_name}: {str(e)}")
+                await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
+                raise
             
     except Exception as e:
         logger.error(f"Error processing file {file_name}: {str(e)}")
-        status = ProcessingStatus.FAILED
-        error_message = str(e)
-    
-    finally:
-        # Update status
-        if file_name in processing_status:
-            processing_status[file_name].status = status
-            processing_status[file_name].end_time = datetime.utcnow()
-            if status == ProcessingStatus.FAILED:
-                processing_status[file_name].error_message = error_message
-
+        await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
 
 async def delete_from_vector_store(filename: str) -> dict:
     """
@@ -853,3 +702,29 @@ def sanitize_id(filename: str) -> str:
     # Remove any duplicate dashes
     sanitized = '-'.join(filter(None, sanitized.split('-')))
     return sanitized
+
+def serialize_metadata(metadata: dict) -> dict:
+    """Convert metadata values to JSON-serializable format."""
+    serialized = {}
+    for key, value in metadata.items():
+        if hasattr(value, 'text'):  # Handle Title objects
+            serialized[key] = value.text
+        elif isinstance(value, (str, int, float, bool, type(None))):
+            serialized[key] = value
+        else:
+            try:
+                # Try to convert to string if it's not a basic type
+                serialized[key] = str(value)
+            except:
+                # If conversion fails, skip this field
+                continue
+    return serialized
+
+@app.post("/reset_file_status/{filename}")
+async def reset_file_status(filename: str):
+    """Reset the processing status of a file to NOT_STARTED."""
+    try:
+        await storage_manager.reset_status(filename)
+        return {"message": f"Successfully reset status for {filename}"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
