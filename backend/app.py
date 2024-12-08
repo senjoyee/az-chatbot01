@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field
 from azure.search.documents import SearchClient
 from azure.search.documents.indexes import SearchIndexClient
 from azure.search.documents.indexes.models import (
+    FreshnessScoringFunction,
+    FreshnessScoringParameters,
     ScoringProfile,
     SearchableField,
     SearchField,
@@ -126,29 +128,50 @@ fields = [
         type=SearchFieldDataType.String,
         searchable=True,
     ),
-    # Additional field to store the title
-    SearchableField(
-        name="title",
-        type=SearchFieldDataType.String,
-        searchable=True,
-    ),
     # Additional field for filtering on document source
-    SimpleField(
+    SearchableField(
         name="source",
         type=SearchFieldDataType.String,
         filterable=True,
+        searchable=True,
     ),
+    SimpleField(  
+        name="last_update",  
+        type=SearchFieldDataType.DateTimeOffset,  
+        filterable=True,  
+        sortable=True,  
+    ), 
 ]
+
+
+scoring_profile = ScoringProfile(  
+    name="content_source_freshness_profile",  
+    text_weights=TextWeights(weights={  
+        "content": 5,  # Highest weight for content  
+        "source": 3    # Lower weight for source  
+    }),  
+    function_aggregation="sum",  
+    functions=[  
+        FreshnessScoringFunction(  
+            field_name="last_update",  
+            boost=100,  
+            parameters=FreshnessScoringParameters(boosting_duration="P15D"),  
+            interpolation="linear"  
+        )  
+    ]  
+)  
 
 index_name: str = os.getenv("AZURE_SEARCH_INDEX")
 
-vector_store: AzureSearch = AzureSearch(
-    azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
-    azure_search_key=AZURE_SEARCH_KEY,
-    index_name=AZURE_SEARCH_INDEX,
-    embedding_function=embedding_function,
-    fields=fields,
-)
+vector_store: AzureSearch = AzureSearch(  
+    azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,  
+    azure_search_key=AZURE_SEARCH_KEY,  
+    index_name=AZURE_SEARCH_INDEX,  
+    embedding_function=embedding_function,  
+    fields=fields,  
+    scoring_profiles=[scoring_profile],  
+    default_scoring_profile="content_source_freshness_profile"  
+)  
 
 # Initialize services
 storage_manager = AzureStorageManager()
@@ -493,10 +516,9 @@ async def upload_files(files: list[UploadFile] = File(...)):
 @app.post("/process_uploaded_files")
 async def process_uploaded_files(event: BlobEvent):
     file_name = event.file_name
-    container_name = "uploads"  # Replace with your container name
     
     # Check if we can process this file
-    can_process, error_message = await storage_manager.check_and_acquire_processing_lock(container_name, file_name)
+    can_process, error_message = await storage_manager.check_and_acquire_processing_lock(BLOB_CONTAINER, file_name)
     if not can_process:
         return FileProcessingStatus(
             status=ProcessingStatus.IN_PROGRESS,
@@ -598,12 +620,19 @@ async def process_file_async(event: BlobEvent):
                             
                             metadata["page_numbers"] = list(sorted(page_numbers)) if page_numbers else None
                             
+                            # Remove title field from metadata
+                            metadata.pop('title', None)
+                            
                             # Serialize metadata to ensure JSON compatibility
                             serialized_metadata = serialize_metadata(metadata)
                             
                             doc = DocumentIn(
                                 page_content=chunk.text,
-                                metadata=serialized_metadata
+                                metadata={
+                                    **serialized_metadata,
+                                    "last_update": datetime.utcnow().isoformat() + "Z",
+                                    "id": f"{base_id}_{i:04d}"
+                                }
                             )
                             documents.append(doc)
                     
@@ -690,7 +719,8 @@ async def index_documents(documents_in: list[DocumentIn]):
                 "content": document.page_content,
                 "content_vector": embedding,
                 "metadata": json.dumps(document.metadata),
-                "source": document.metadata.get("source", "unknown")
+                "source": document.metadata.get("source", "unknown"),
+                "last_update": datetime.utcnow().isoformat() + "Z"
             }
             
             logger.info(f"Indexing document into Azure Search: {doc_id}")
