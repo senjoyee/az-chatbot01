@@ -83,28 +83,26 @@ export const deleteFile = async (filename: string) => {
   }
 };
 
-export interface ListFilesResponse {
-  files: any[];
-  total_files: number;
-  page: number;
-  total_pages: number;
-}
-
-export const listFiles = async (page: number = 1, pageSize: number = 10): Promise<ListFilesResponse> => {
-  const url = `${API_BASE_URL}/listfiles?page=${page}&page_size=${pageSize}`;
-  console.log('Attempting to fetch files from:', url);
+export const listFiles = async (page: number = 1, pageSize: number = 10) => {
+  console.log('Attempting to fetch files from:', `${API_BASE_URL}/listfiles?page=${page}&page_size=${pageSize}`);
   
   try {
-    const response = await fetch(url, {
-      credentials: 'include',
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/listfiles?page=${page}&page_size=${pageSize}`,
+      {
+        credentials: 'include',
+      }
+    );
+    console.log('Raw response:', response);
     
     if (!response.ok) {
       const errorText = await response.text();
+      console.error('List files failed:', response.status, errorText);
       throw new Error(`Failed to fetch files: ${response.status} ${errorText}`);
     }
     
-    const data: ListFilesResponse = await response.json();
+    const data = await response.json();
+    console.log('Parsed response data:', data);
     return data;
   } catch (error) {
     handleApiError(error, 'file listing');

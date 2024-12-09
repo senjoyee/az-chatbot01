@@ -4,6 +4,10 @@ FROM node:20-alpine
 # Set the working directory in the container
 WORKDIR /app
 
+# Set environment variables
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+
 # Copy package.json and package-lock.json to the working directory
 COPY package*.json ./
 

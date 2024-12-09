@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Checkbox } from "@/components/ui/checkbox"
-import { Upload, Trash2, File, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Upload, Trash2, File } from 'lucide-react'
 import { toast } from 'sonner'
 import { uploadFiles, deleteFile, listFiles } from './api' // Import the API functions
 
@@ -22,17 +22,17 @@ export default function DocumentUploadService() {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [currentPage, setCurrentPage] = useState(1)
-  const [totalFiles, setTotalFiles] = useState(0)
-  const [totalPages, setTotalPages] = useState(1)
-  const [pageSize, setPageSize] = useState(10) // Add new state for page size
-  const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] // Available page size options
 
-  const fetchFiles = useCallback(async () => {
+  // Fetch the list of files when the component mounts
+  useEffect(() => {
+    fetchFiles()
+  }, [])
+
+  const fetchFiles = async () => {
     try {
       console.log('Starting fetchFiles...');
       setLoading(true);
-      const response = await listFiles(currentPage, pageSize);
+      const response = await listFiles();
       console.log('List files response:', response);
       
       if (!response.files) {
@@ -40,27 +40,25 @@ export default function DocumentUploadService() {
         throw new Error('Invalid response format - missing files property');
       }
       
-      const mappedFiles = response.files.map((file: any) => ({
-        id: file.name,
-        name: file.name,
-        size: file.size || 0,
-        uploadDate: new Date(file.lastModified || Date.now())
-      }));
+      const mappedFiles = response.files.map((file: any) => {
+        console.log('Processing file:', file);
+        return {
+          id: file.name,
+          name: file.name,
+          size: file.size || 0,
+          uploadDate: new Date(file.lastModified || Date.now())
+        };
+      });
       
+      console.log('Mapped files:', mappedFiles);
       setFiles(mappedFiles);
-      setTotalFiles(response.total_files);
-      setTotalPages(response.total_pages);
     } catch (error) {
       console.error('Error in fetchFiles:', error);
       toast.error('Failed to fetch files: ' + (error as Error).message);
     } finally {
       setLoading(false);
     }
-  }, [currentPage, pageSize]);
-
-  useEffect(() => {
-    fetchFiles();
-  }, [fetchFiles]);
+  };
 
   const onDrop = useCallback(async (acceptedFiles: File[]) => {
     setUploading(true);
@@ -122,15 +120,6 @@ export default function DocumentUploadService() {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   }
 
-  const handlePageChange = (newPage: number) => {
-    setCurrentPage(newPage);
-  };
-
-  const handlePageSizeChange = (value: string) => {
-    setPageSize(Number(value));
-    setCurrentPage(1); // Reset to first page when changing page size
-  };
-
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
@@ -155,109 +144,66 @@ export default function DocumentUploadService() {
           {loading ? (
             <p className="text-center mt-4">Loading files...</p>
           ) : (
-            <>
-              {files.length > 0 && (
-                <>
-                  <Table className="mt-8">
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead className="w-[50px]">Select</TableHead>
-                        <TableHead>Document Name</TableHead>
-                        <TableHead>Size</TableHead>
-                        <TableHead>Upload Date</TableHead>
-                        <TableHead>Actions</TableHead>
+            files.length > 0 && (
+              <>
+                <Table className="mt-8">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="w-[50px]">Select</TableHead>
+                      <TableHead>Document Name</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Upload Date</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {files.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell>
+                          <Checkbox
+                            checked={selectedFiles.includes(file.id)}
+                            onCheckedChange={() => toggleFileSelection(file.id)}
+                          />
+                        </TableCell>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center">
+                            <File className="mr-2 h-4 w-4" />
+                            {file.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatFileSize(file.size)}</TableCell>
+                        <TableCell>{file.uploadDate.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <Button variant="ghost" size="icon" onClick={() => handleDeleteFile(file.id)}>
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </TableCell>
                       </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {files.map((file) => (
-                        <TableRow key={file.id}>
-                          <TableCell>
-                            <Checkbox
-                              checked={selectedFiles.includes(file.id)}
-                              onCheckedChange={() => toggleFileSelection(file.id)}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">
-                            <div className="flex items-center">
-                              <File className="mr-2 h-4 w-4" />
-                              {file.name}
-                            </div>
-                          </TableCell>
-                          <TableCell>{formatFileSize(file.size)}</TableCell>
-                          <TableCell>{file.uploadDate.toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Button variant="ghost" size="icon" onClick={() => handleDeleteFile(file.id)}>
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                  
-                  <div className="mt-4 flex items-center justify-between">
-                    <div className="flex items-center space-x-4">
-                      <span className="text-sm text-muted-foreground">Show</span>
-                      <select
-                        className="w-[100px] p-2 border border-gray-300 rounded-md focus:outline-none"
-                        value={pageSize}
-                        onChange={(e) => handlePageSizeChange(e.target.value)}
-                      >
-                        {PAGE_SIZE_OPTIONS.map((size) => (
-                          <option key={size} value={size}>
-                            {size}
-                          </option>
-                        ))}
-                      </select>
-                      <span className="text-sm text-muted-foreground">items per page</span>
-                    </div>
-                    
-                    <div className="flex items-center space-x-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm">
-                        Page {currentPage} of {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handlePageChange(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    ))}
+                  </TableBody>
+                </Table>
+                <div className="mt-4 flex justify-between items-center">
+                  <p className="text-sm text-muted-foreground">
+                    {selectedFiles.length} of {files.length} document{files.length !== 1 ? 's' : ''} selected
+                  </p>
+                  <div className="space-x-2">
+                    <Button 
+                      variant="destructive" 
+                      onClick={deleteSelectedFiles}
+                      disabled={selectedFiles.length === 0}
+                    >
+                      Delete Selected
+                    </Button>
+                    <Button variant="outline" onClick={() => setFiles([])}>Clear All</Button>
                   </div>
-                  
-                  <div className="mt-4 flex justify-between items-center">
-                    <p className="text-sm text-muted-foreground">
-                      {selectedFiles.length} of {files.length} document{files.length !== 1 ? 's' : ''} selected
-                    </p>
-                    <div className="space-x-2">
-                      <Button 
-                        variant="destructive" 
-                        onClick={deleteSelectedFiles}
-                        disabled={selectedFiles.length === 0}
-                      >
-                        Delete Selected
-                      </Button>
-                      <Button variant="outline" onClick={() => setFiles([])}>Clear All</Button>
-                    </div>
-                  </div>
-                </>
-              )}
-            </>
+                </div>
+              </>
+            )
           )}
         </CardContent>
         <CardFooter>
           <p className="text-sm text-muted-foreground">
-            Total documents: {totalFiles}
+            {files.length} document{files.length !== 1 ? 's' : ''} uploaded
           </p>
         </CardFooter>
       </Card>
