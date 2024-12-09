@@ -45,24 +45,19 @@ from azure_storage import AzureStorageManager, ProcessingStatus
 # Import utility functions
 from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata
 from config.logging_config import setup_logging
-
-# Load environment variables
-load_dotenv(find_dotenv())
+from config.settings import (
+    AZURE_SEARCH_SERVICE,
+    AZURE_SEARCH_KEY,
+    AZURE_SEARCH_INDEX,
+    AZURE_OPENAI_API_KEY,
+    AZURE_OPENAI_ENDPOINT,
+    BLOB_CONN_STRING,
+    BLOB_CONTAINER,
+    AZURE_SEARCH_SERVICE_ENDPOINT
+)
 
 # Setup logging using the configuration module
 logger = setup_logging()
-
-# Environment variables
-AZURE_SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
-AZURE_SEARCH_KEY = os.getenv("AZURE_SEARCH_KEY")
-AZURE_SEARCH_INDEX = os.getenv("AZURE_SEARCH_INDEX")
-AZURE_OPENAI_API_KEY = os.getenv("AZURE_OPENAI_API_KEY")
-AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
-BLOB_CONN_STRING = os.getenv("BLOB_CONN_STRING")
-BLOB_CONTAINER = os.getenv("BLOB_CONTAINER")
-
-# Construct Azure Search endpoint
-AZURE_SEARCH_SERVICE_ENDPOINT = f"https://{AZURE_SEARCH_SERVICE}.search.windows.net"
 
 # Initialize embeddings
 embeddings = AzureOpenAIEmbeddings(model="text-embedding-3-large",dimensions=1536)
@@ -128,7 +123,7 @@ scoring_profile = ScoringProfile(
     ]  
 )  
 
-index_name: str = os.getenv("AZURE_SEARCH_INDEX")
+index_name: str = AZURE_SEARCH_INDEX
 
 vector_store: AzureSearch = AzureSearch(  
     azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,  
