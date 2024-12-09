@@ -196,26 +196,9 @@ except Exception as e:
     logger.info(f"Index {AZURE_SEARCH_INDEX} does not exist. Creating...")
     logger.info("Index will be created automatically by Langchain")
 
-# Pydantic Models
-class Message(BaseModel):
-    role: str
-    content: str
-    id: Optional[int] = None
-
-class Conversation(BaseModel):
-    conversation: list[Message]
-
-class ConversationRequest(BaseModel):
-    question: str
-    conversation: Conversation
-
-class DocumentIn(BaseModel):
-    page_content: str
-    metadata: dict = Field(default_factory=dict)
-
-class BlobEvent(BaseModel):
-    event_type: str
-    file_name: str
+# Import models from the new module
+from models.schemas import Message, Conversation, ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
+from models.enums import ProcessingStatus
 
 # Initialize the chat model
 llm = AzureChatOpenAI(
@@ -327,21 +310,6 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
-
-# Processing status enum
-class ProcessingStatus(str, Enum):
-    NOT_STARTED = "not_started"
-    IN_PROGRESS = "in_progress"
-    COMPLETED = "completed"
-    FAILED = "failed"
-
-# File processing status model
-class FileProcessingStatus(BaseModel):
-    status: ProcessingStatus
-    file_name: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error_message: Optional[str] = None
 
 @app.get("/file_status/{file_name}")
 async def get_file_status(file_name: str) -> FileProcessingStatus:
