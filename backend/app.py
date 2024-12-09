@@ -55,108 +55,24 @@ from config.settings import (
     BLOB_CONTAINER,
     AZURE_SEARCH_SERVICE_ENDPOINT
 )
+from config.azure_search import (
+    init_vector_store,
+    init_search_client,
+    init_index_client,
+    embeddings
+)
 
 # Setup logging using the configuration module
 logger = setup_logging()
 
-# Initialize embeddings
-embeddings = AzureOpenAIEmbeddings(model="text-embedding-3-large",dimensions=1536)
-
-embedding_function = embeddings.embed_query
-
-
-# Define fields for Azure Search
-fields = [
-    SimpleField(
-        name="id",
-        type=SearchFieldDataType.String,
-        key=True,
-        filterable=True,
-    ),
-    SearchableField(
-        name="content",
-        type=SearchFieldDataType.String,
-        searchable=True,
-    ),
-    SearchField(
-        name="content_vector",
-        type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-        searchable=True,
-        vector_search_dimensions=1536,
-        vector_search_profile_name="myHnswProfile",
-    ),
-    SearchableField(
-        name="metadata",
-        type=SearchFieldDataType.String,
-        searchable=True,
-    ),
-    # Additional field for filtering on document source
-    SearchableField(
-        name="source",
-        type=SearchFieldDataType.String,
-        filterable=True,
-        searchable=True,
-    ),
-    SimpleField(  
-        name="last_update",  
-        type=SearchFieldDataType.DateTimeOffset,  
-        filterable=True,  
-        sortable=True,  
-    ), 
-]
-
-
-scoring_profile = ScoringProfile(  
-    name="content_source_freshness_profile",  
-    text_weights=TextWeights(weights={  
-        "content": 5,  # Highest weight for content  
-        "source": 3    # Lower weight for source  
-    }),  
-    function_aggregation="sum",  
-    functions=[  
-        FreshnessScoringFunction(  
-            field_name="last_update",  
-            boost=100,  
-            parameters=FreshnessScoringParameters(boosting_duration="P15D"),  
-            interpolation="linear"  
-        )  
-    ]  
-)  
-
-index_name: str = AZURE_SEARCH_INDEX
-
-vector_store: AzureSearch = AzureSearch(  
-    azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,  
-    azure_search_key=AZURE_SEARCH_KEY,  
-    index_name=AZURE_SEARCH_INDEX,  
-    embedding_function=embedding_function,  
-    fields=fields,  
-    scoring_profiles=[scoring_profile],  
-    default_scoring_profile="content_source_freshness_profile"  
-)  
+# Initialize vector store and clients
+vector_store = init_vector_store()
+search_client = init_search_client()
+index_client = init_index_client()
 
 # Initialize services
 storage_manager = AzureStorageManager()
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
-
-# Initialize search client for direct operations if needed
-search_client = SearchClient(
-    endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
-    index_name=AZURE_SEARCH_INDEX,
-    credential=AzureKeyCredential(AZURE_SEARCH_KEY)
-)
-
-# Check if index exists and create if it doesn't
-try:
-    index_client = SearchIndexClient(
-        endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_SEARCH_KEY)
-    )
-    index_client.get_index(AZURE_SEARCH_INDEX)
-    logger.info(f"Index {AZURE_SEARCH_INDEX} already exists")
-except Exception as e:
-    logger.info(f"Index {AZURE_SEARCH_INDEX} does not exist. Creating...")
-    logger.info("Index will be created automatically by Langchain")
 
 # Import models from the new module
 from models.schemas import Message, Conversation, ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
