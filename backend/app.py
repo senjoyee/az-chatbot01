@@ -44,49 +44,13 @@ from azure_storage import AzureStorageManager, ProcessingStatus
 
 # Import utility functions
 from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata
+from config.logging_config import setup_logging
 
 # Load environment variables
 load_dotenv(find_dotenv())
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)  # Log to stdout for Azure App Service
-    ]
-)
-
-loggers_config = {
-    # PDF processing
-    'pdfminer': logging.INFO,
-    'pdfminer.pdfinterp': logging.INFO,
-    'pdfminer.converter': logging.INFO,
-    'pdfminer.layout': logging.INFO,
-    'pdfminer.image': logging.INFO,
-    
-    # Document processing
-    'unstructured': logging.INFO,
-    'detectron2': logging.INFO,
-    'PIL': logging.INFO,
-    
-    # OCR related
-    'tesseract': logging.INFO,
-    
-    # Azure SDK
-    'azure.core.pipeline.policies.http_logging_policy': logging.INFO,
-    'azure.identity': logging.INFO
-}
-
-# Apply logger configurations
-for logger_name, level in loggers_config.items():
-    logging.getLogger(logger_name).setLevel(level)
-    # Ensure each logger also logs to stdout
-    logger_instance = logging.getLogger(logger_name)
-    if not logger_instance.handlers:
-        logger_instance.addHandler(logging.StreamHandler(sys.stdout))
-
-logger = logging.getLogger(__name__)
+# Setup logging using the configuration module
+logger = setup_logging()
 
 # Environment variables
 AZURE_SEARCH_SERVICE = os.getenv("AZURE_SEARCH_SERVICE")
