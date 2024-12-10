@@ -50,72 +50,46 @@ fields = [
         analyzer_name="standard.lucene",
     ),
     SearchField(
-        name="content_vector",
+        name="embedding",
         type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-        hidden=False,
-        searchable=True,
-        vector_search_dimensions=1536,
-        vector_search_configuration="default",
+        dimensions=1536,
+        searchable=True
     ),
     SimpleField(
         name="metadata",
         type=SearchFieldDataType.String,
         filterable=True,
-    ),
-    SearchableField(
-        name="source",
-        type=SearchFieldDataType.String,
-        analyzer_name="standard.lucene",
+        sortable=True,
     ),
     SimpleField(
-        name="last_update",
+        name="timestamp",
         type=SearchFieldDataType.DateTimeOffset,
         filterable=True,
         sortable=True,
     ),
 ]
 
-# Define scoring profile (exactly as in original implementation)
-scoring_profile = ScoringProfile(
-    name="content_source_freshness_profile",
-    text_weights=TextWeights(weights={
-        "content": 5,  # Highest weight for content
-        "source": 3    # Lower weight for source
-    }),
-    function_aggregation="sum",
-    functions=[
-        FreshnessScoringFunction(
-            field_name="last_update",
-            boost=100,
-            parameters=FreshnessScoringParameters(boosting_duration="P15D"),
-            interpolation="linear"
-        )
-    ]
+# Initialize the vector store instance
+vector_store = AzureSearch(
+    azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
+    azure_search_key=AZURE_SEARCH_KEY,
+    index_name=AZURE_SEARCH_INDEX,
+    embedding_function=embedding_function,
+    fields=fields
 )
 
-def init_vector_store() -> AzureSearch:
-    """Initialize and return the Azure Search vector store with the original configuration."""
-    return AzureSearch(
-        azure_search_endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
-        azure_search_key=AZURE_SEARCH_KEY,
-        index_name=AZURE_SEARCH_INDEX,
-        embedding_function=embedding_function,
-        fields=fields,
-        scoring_profiles=[scoring_profile],
-        default_scoring_profile="content_source_freshness_profile"
-    )
+# Initialize the search client
+search_client = SearchClient(
+    endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
+    index_name=AZURE_SEARCH_INDEX,
+    credential=AzureKeyCredential(AZURE_SEARCH_KEY)
+)
 
-def init_search_client() -> SearchClient:
-    """Initialize and return the Azure Search client."""
-    return SearchClient(
-        endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
-        index_name=AZURE_SEARCH_INDEX,
-        credential=AzureKeyCredential(AZURE_SEARCH_KEY)
-    )
+# Initialize the index client
+index_client = SearchIndexClient(
+    endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
+    credential=AzureKeyCredential(AZURE_SEARCH_KEY)
+)
 
-def init_index_client() -> SearchIndexClient:
-    """Initialize and return the Azure Search index client."""
-    return SearchIndexClient(
-        endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
-        credential=AzureKeyCredential(AZURE_SEARCH_KEY)
-    )
+# Export these instances
+__all__ = ['vector_store', 'search_client', 'index_client', 'embeddings']
