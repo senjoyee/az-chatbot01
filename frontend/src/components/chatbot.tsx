@@ -102,11 +102,11 @@ export default function Component() {
             </Alert>  
           )}  
 
-          <ScrollArea className="flex-grow px-8 py-6" ref={scrollAreaRef}>  
+          <ScrollArea className="flex-grow px-6 py-4" ref={scrollAreaRef}>  
             {messages.map((message) => (  
               <div  
                 key={message.id}  
-                className={`mb-4 flex ${  
+                className={`mb-2 flex ${  
                   message.sender === 'user' ? 'justify-end' : 'justify-start'  
                 }`}  
               >  
@@ -116,21 +116,21 @@ export default function Component() {
                   </Avatar>  
                 )}  
                 <div  
-                  className={`inline-block p-4 rounded-lg max-w-[85%] ${  
+                  className={`inline-block p-3 rounded-lg max-w-[85%] ${  
                     message.sender === 'user'  
                       ? 'bg-primary/80 text-primary-foreground rounded-br-none'  
                       : 'bg-gray-100 text-gray-800 rounded-bl-none'  
                   }`}  
                 >  
                   <ReactMarkdown   
-                    className="font-mono text-sm whitespace-pre-wrap break-words"  
+                    className="font-mono text-sm whitespace-pre-wrap break-words [&>*]:leading-tight [&>p]:my-0.5 last:[&>p]:mb-0 first:[&>p]:mt-0"  
                     components={{  
                       code: ({node, inline, className, children, ...props}) => (  
                         <code  
-                          className={`${  
+                          className={`${
                             inline   
                               ? 'bg-gray-200 px-1 rounded'   
-                              : 'block bg-gray-800 text-white p-2 rounded my-2'  
+                              : 'block bg-gray-800 text-white p-2 rounded my-1'  
                           } ${className}`}  
                           {...props}  
                         >  
@@ -138,9 +138,15 @@ export default function Component() {
                         </code>  
                       ),  
                       p: ({children}) => (  
-                        <p className="whitespace-pre-wrap break-words">  
+                        <p className="whitespace-pre-wrap break-words leading-5">  
                           {children}  
                         </p>  
+                      ),  
+                      h1: ({children}) => (  
+                        <h1 className="text-base font-bold my-1">{children}</h1>  
+                      ),  
+                      h2: ({children}) => (  
+                        <h2 className="text-base font-semibold my-1">{children}</h2>  
                       )  
                     }}  
                   >  
