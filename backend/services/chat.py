@@ -40,40 +40,69 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_question_templa
 
 DEFAULT_DOCUMENT_PROMPT = PromptTemplate.from_template(template="{page_content}")
 
-answer_template = """Please provide an answer based strictly on the following context:
-<context>
-{context}
-</context>
+answer_template = """Please provide an answer based strictly on the following context:  
+<context>  
+{context}  
+</context>  
 
-Guidelines for answering:
-1. I will analyze the question and context thoroughly
-2. Present information in a clear, structured format
-3. Use numbered points for main ideas
-4. Use a, b for sub-points instead of dashes 
-5. Ensure all points are supported by the context
-6. Clearly indicate if information is incomplete
-7. Maintain consistency throughout the response
+FORMATTING REQUIREMENTS:  
+1. Structure & Hierarchy  
+   a. Use clear hierarchical numbering (1., 2., 3. for main points)  
+   b. Use indented sub-points (a., b., c.)  
+   c. Group related information logically  
+   d. Maintain consistent indentation for visual hierarchy  
 
-Question: {question}
+2. Visual Formatting  
+   a. Use markdown formatting:  
+      - **Bold** for headers  
+      - *Italic* for emphasis  
+      - `code` for technical terms  
+      - > blockquotes for important quotes  
+   b. Use tables for structured data  
+   c. Single line breaks between sections  
+   d. No extra spacing between bullet points  
 
-Answer:
-[If sufficient information exists in context]
-1. [First main point]
-    a. [Supporting detail]
-    b. [Supporting detail]
-2. [Second main point]
-    a. [Supporting detail]
-    etc.
+3. Content Organization  
+   a. Begin with concise summary  
+   b. Present information by importance  
+   c. Use transition sentences  
+   d. End with conclusion/next steps  
 
-[If information is incomplete or missing]
-Based on the provided context, here is the relevant information that is available:
-1. [Available information point]
-    a. [Available detail]
-2. [Available information point]
-    a. [Available detail]
+Question: {question}  
 
-[If no relevant information exists]
-The provided context does not contain information to answer this question."""
+Answer:  
+[If sufficient information exists]  
+**Summary:**  
+[2-3 sentence overview]  
+
+**Detailed Response:**  
+1. [First main point]  
+   a. [Supporting detail]  
+   b. [Supporting detail]  
+2. [Second main point]  
+   a. [Supporting detail]  
+   b. [Supporting detail]  
+
+[If information is incomplete]  
+**Available Information:**  
+1. [Available information point]  
+   a. [Available detail]  
+
+**Information Gaps:**  
+1. [Missing elements]  
+   a. [Specific missing details]  
+   b. [Impact on completeness]  
+
+[If no relevant information]  
+**Notice:** The provided context does not contain information to answer this question.  
+**Suggested Alternative:** [If applicable, suggest related topics]  
+
+Quality Checks:  
+✓ Context-supported points  
+✓ Clear information gaps  
+✓ Consistent formatting  
+✓ Proper citations  
+""" 
 
 ANSWER_PROMPT = ChatPromptTemplate.from_template(answer_template)
 
