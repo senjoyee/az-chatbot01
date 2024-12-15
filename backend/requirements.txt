@@ -3,9 +3,10 @@ uvicorn
 requests
 python-dotenv
 langchain
+langchain-core
 langchain-openai
 langchain-community
-langchain-text-splitters
+langgraph
 typing_extensions
 python-multipart
 azure-storage-blob

@@ -47,27 +47,53 @@ fields = [
     SearchableField(
         name="content",
         type=SearchFieldDataType.String,
-        analyzer_name="standard.lucene",
+        searchable=True,
     ),
     SearchField(
-        name="embedding",
+        name="content_vector",
         type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
-        dimensions=1536,
-        searchable=True
+        searchable=True,
+        vector_search_dimensions=1536,
+        vector_search_profile_name="myHnswProfile",
     ),
-    SimpleField(
+    SearchableField(
         name="metadata",
         type=SearchFieldDataType.String,
+        searchable=True,
         filterable=True,
-        sortable=True,
     ),
-    SimpleField(
-        name="timestamp",
-        type=SearchFieldDataType.DateTimeOffset,
+    SearchableField(
+        name="source",
+        type=SearchFieldDataType.String,
         filterable=True,
-        sortable=True,
+        facetable=True,
+        searchable=True,
     ),
+    SimpleField(  
+        name="last_update",  
+        type=SearchFieldDataType.DateTimeOffset,  
+        filterable=True,  
+        sortable=True,  
+    ), 
 ]
+
+# Define scoring profile
+scoring_profile = ScoringProfile(  
+    name="content_source_freshness_profile",  
+    text_weights=TextWeights(weights={  
+        "content": 5,  # Highest weight for content  
+        "source": 4    # Lower weight for source  
+    }),  
+    function_aggregation="sum",  
+    functions=[  
+        FreshnessScoringFunction(  
+            field_name="last_update",  
+            boost=100,  
+            parameters=FreshnessScoringParameters(boosting_duration="P15D"),  
+            interpolation="linear"  
+        )  
+    ]  
+)
 
 # Initialize the vector store instance
 vector_store = AzureSearch(
@@ -75,7 +101,9 @@ vector_store = AzureSearch(
     azure_search_key=AZURE_SEARCH_KEY,
     index_name=AZURE_SEARCH_INDEX,
     embedding_function=embedding_function,
-    fields=fields
+    fields=fields,
+    scoring_profiles=[scoring_profile],
+    default_scoring_profile="content_source_freshness_profile"
 )
 
 # Initialize the search client
