@@ -14,6 +14,7 @@ from config.settings import (
 )
 from config.azure_search import vector_store
 from models.schemas import Message
+from services.grader import grade_document
 
 logger = logging.getLogger(__name__)
 
@@ -144,13 +145,29 @@ def retrieve_documents(state: dict) -> dict:
     state["documents"] = vector_store.hybrid_search(state["question"], k=10)
     return state
 
+def grade_documents(state: dict) -> dict:
+    logger.info(f"Grading documents for question: {state.get('question')}")
+
+    graded_documents = []
+    for doc in state.get("documents", []):
+        score = grade_document(state.get("question"), doc.page_content)
+        logger.info(f"Document ID {doc.metadata.get('id')}: Grade = {score}")
+        if score == "yes":
+            graded_documents.append(doc)
+
+    state["graded_documents"] = graded_documents
+    logger.info(f"Number of documents after grading: {len(graded_documents)}")
+    return state
+
 def generate_response(state: dict) -> dict:
     logger.info(f"Generating response with state: {state}")
-    if "documents" not in state:
-        logger.error("No documents found in state.")
-        raise ValueError("No documents found to generate a response.")
+    if "graded_documents" not in state or not state["graded_documents"]:
+        logger.warning("No graded documents available for generating response.")
+        state["response"] = "I'm sorry, but I couldn't find relevant information to answer your question."
+        return state
 
-    context = "\n\n".join([doc.page_content for doc in state["documents"]])
+    # Combine the content of graded documents into context
+    context = "\n\n".join([doc.page_content for doc in state["graded_documents"]])
     logger.debug(f"Formatted context: {context}")
 
     _input = (
@@ -180,13 +197,15 @@ builder = StateGraph("agent_state")
 # Add nodes
 builder.add_node("condense_question", condense_question)
 builder.add_node("retrieve_documents", retrieve_documents)
+builder.add_node("grade_documents", grade_documents)
 builder.add_node("generate_response", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
 builder.set_entry_point("condense_question")
 builder.add_edge("condense_question", "retrieve_documents")
-builder.add_edge("retrieve_documents", "generate_response")
+builder.add_edge("retrieve_documents", "grade_documents")
+builder.add_edge("grade_documents", "generate_response")
 builder.add_edge("generate_response", "update_history")
 builder.add_edge("update_history", END)
 
@@ -194,11 +213,12 @@ builder.add_edge("update_history", END)
 agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
-    """Runs the Langgraph agent."""
+    """Runs the Langgraph agent with grading step."""
     inputs = {
         "question": question,
         "chat_history": chat_history,
         "documents": None,
+        "graded_documents": None,
         "response": None
     }
     result = await agent.ainvoke(inputs)
