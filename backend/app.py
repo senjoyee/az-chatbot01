@@ -54,7 +54,7 @@ from config.settings import (
     AZURE_SEARCH_SERVICE_ENDPOINT
 )
 from config.azure_search import vector_store, search_client, index_client, embeddings
-from services.chat import get_conversation_response
+from services.agent import run_agent
 
 # Setup logging using the configuration module
 logger = setup_logging()
@@ -66,6 +66,7 @@ blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
 # Import models from the new module
 from models.schemas import Message, Conversation, ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
 from models.enums import ProcessingStatus
+from services.agent import run_agent
 
 app = FastAPI()
 
@@ -130,18 +131,15 @@ async def ask_question(request: ConversationRequest) -> dict:
     try:
         question = request.question
         conversation = request.conversation
-        
+
         # Debug logging
         logger.info(f"Received question: {question}")
         logger.info(f"Received conversation: {conversation}")
 
-        # Use the messages directly without transformation
-        chat_history = conversation.conversation
-        
-        logger.info(f"Using chat history: {chat_history}")
-        
-        answer = await get_conversation_response(question, chat_history)
-        
+        # Run the Langgraph agent
+        result = await run_agent(question, conversation.conversation)
+        answer = result.get("response")  # Accessing the 'response' from the dict
+
         return {
             "answer": answer,
             "status": "success"
