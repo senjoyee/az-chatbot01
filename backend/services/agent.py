@@ -1,4 +1,5 @@
 import logging
+import re
 from typing import List, Dict, Any
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -142,7 +143,7 @@ def condense_question(state: dict) -> dict:
 
 def retrieve_documents(state: dict) -> dict:
     logger.info(f"Retrieving documents for question: {state.get('question')}")
-    state["documents"] = vector_store.hybrid_search(state["question"], k=10)
+    state["documents"] = vector_store.hybrid_search(state["question"], k=5)
     return state
 
 def grade_documents(state: dict) -> dict:

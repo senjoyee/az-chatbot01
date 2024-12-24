@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from operator import itemgetter
 from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query
@@ -325,6 +326,15 @@ async def process_file_async(event: BlobEvent):
                         new_after_n_chars=5000,
                     )
                     logger.info(f"Created {len(chunks)} chunks from {file_name}")
+
+                    # Extract customer name from filename
+                    customer_match = re.match(r'^([^_]+)_', file_name)
+                    if customer_match:
+                        customer_name = customer_match.group(1)
+                        logger.info(f"Extracted customer name: {customer_name}")
+                    else:
+                        customer_name = "Unknown"
+                        logger.warning(f"Could not extract customer name from filename: {file_name}")
                     
                     # Convert chunks to documents
                     documents = []
@@ -334,7 +344,8 @@ async def process_file_async(event: BlobEvent):
                         if hasattr(chunk, 'text') and chunk.text.strip():
                             # Get metadata
                             metadata = {
-                                "source": file_name
+                                "source": file_name,
+                                "customer": customer_name,
                             }
                             if hasattr(chunk, 'metadata'):
                                 element_metadata = chunk.metadata.__dict__ if hasattr(chunk.metadata, '__dict__') else chunk.metadata
@@ -446,6 +457,8 @@ async def index_documents(documents_in: list[DocumentIn]):
             
             doc_id = f"doc_{hash(document.page_content)}"
             logger.info(f"Created document ID: {doc_id}")
+
+            customer = document.metadata.get("customer", "Unknown")
             
             document_obj = {
                 "id": doc_id,
@@ -453,6 +466,7 @@ async def index_documents(documents_in: list[DocumentIn]):
                 "content_vector": embedding,
                 "metadata": json.dumps(document.metadata),
                 "source": document.metadata.get("source", "unknown"),
+                "customer": customer,
                 "last_update": datetime.utcnow().isoformat() + "Z"
             }
             

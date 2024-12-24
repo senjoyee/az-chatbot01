@@ -3,7 +3,7 @@ Pydantic models for the application.
 """
 
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
 class Message(BaseModel):
@@ -23,7 +23,7 @@ class ConversationRequest(BaseModel):
 class DocumentIn(BaseModel):
     """Model for document input."""
     page_content: str
-    metadata: Dict = Field(default_factory=dict)
+    metadata: Dict[str, Any] = Field(default_factory=dict)
 
 class BlobEvent(BaseModel):
     """Model for blob storage events."""

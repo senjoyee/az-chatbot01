@@ -69,6 +69,13 @@ fields = [
         facetable=True,
         searchable=True,
     ),
+    SearchableField(
+        name="customer",  # New customer field
+        type=SearchFieldDataType.String,
+        filterable=True,
+        facetable=True,
+        searchable=True,
+    ),
     SimpleField(  
         name="last_update",  
         type=SearchFieldDataType.DateTimeOffset,  
@@ -82,7 +89,8 @@ scoring_profile = ScoringProfile(
     name="content_source_freshness_profile",  
     text_weights=TextWeights(weights={  
         "content": 5,  # Highest weight for content  
-        "source": 4    # Lower weight for source  
+        "source": 3,   # Lower weight for source  
+        "customer": 5,    # Customer has the highest weight
     }),  
     function_aggregation="sum",  
     functions=[  
