@@ -14,6 +14,7 @@ from azure.search.documents.indexes.models import (
     SearchFieldDataType,
     SimpleField,
     TextWeights,
+    SearchIndex,
 )
 from azure.core.credentials import AzureKeyCredential
 from langchain_community.vectorstores import AzureSearch
@@ -118,6 +119,18 @@ index_client = SearchIndexClient(
     endpoint=AZURE_SEARCH_SERVICE_ENDPOINT,
     credential=AzureKeyCredential(AZURE_SEARCH_KEY)
 )
+
+# Check if index exists and create if it doesn't
+try:
+    index_client.get_index(AZURE_SEARCH_INDEX)
+except Exception:
+    # Create index if it doesn't exist
+    index = SearchIndex(
+        name=AZURE_SEARCH_INDEX,
+        fields=fields,
+        scoring_profiles=[scoring_profile]
+    )
+    index_client.create_index(index)
 
 # Export these instances
 __all__ = ['vector_store', 'search_client', 'index_client', 'embeddings']
