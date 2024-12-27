@@ -1,5 +1,3 @@
-# services/agent.py
-
 import logging
 from typing import List, Dict, Any
 
@@ -9,7 +7,6 @@ from langgraph.graph import StateGraph, END
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.schema import StrOutputParser
-from langchain_core.documents import Document
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
@@ -139,16 +136,12 @@ def condense_question(state: dict) -> dict:
         "question": state.get("question"),
         "chat_history": chat_history_formatted
     })
-    state["question"] = result
+    state["question"] = result  # Assign to 'question' directly
     return state
 
 def retrieve_documents(state: dict) -> dict:
     logger.info(f"Retrieving documents for question: {state.get('question')}")
-    state["documents"] = vector_store.hybrid_search(
-    state["question"],
-    k=20,
-    #filter="contextualized eq true"
-    )
+    state["documents"] = vector_store.hybrid_search(state["question"], k=10)
     return state
 
 def generate_response(state: dict) -> dict:
@@ -176,8 +169,8 @@ def generate_response(state: dict) -> dict:
 def update_history(state: dict) -> dict:
     logger.info(f"Updating history with state: {state}")
     state.setdefault("chat_history", []).extend([
-        Message(role="user", content=state.get("question")),
-        Message(role="assistant", content=state.get("response"))
+        HumanMessage(content=state.get("question")),
+        AIMessage(content=state.get("response"))
     ])
     return state
 
@@ -208,12 +201,5 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
         "documents": None,
         "response": None
     }
-    try:
-        result = await agent.ainvoke(inputs)
-        return {
-            "response": result["response"],
-            "chat_history": result["chat_history"]
-        }
-    except Exception as e:
-        logger.error(f"Agent execution error: {str(e)}")
-        return {"response": "An error occurred while processing your request.", "chat_history": chat_history}
+    result = await agent.ainvoke(inputs)
+    return result  # Already a dict

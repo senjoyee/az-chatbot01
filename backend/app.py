@@ -54,7 +54,6 @@ from config.settings import (
     AZURE_SEARCH_SERVICE_ENDPOINT
 )
 from config.azure_search import vector_store, search_client, index_client, embeddings
-from services.agent import run_agent
 
 # Setup logging using the configuration module
 logger = setup_logging()
@@ -67,6 +66,9 @@ blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
 from models.schemas import Message, Conversation, ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
 from models.enums import ProcessingStatus
 from services.agent import run_agent
+from services.contextualizer import Contextualizer
+
+contextualizer = Contextualizer()
 
 app = FastAPI()
 
@@ -277,126 +279,107 @@ async def process_file_async(event: BlobEvent):
     """Asynchronous file processing function"""
     file_name = event.file_name
     logger.info(f"Starting processing for file: {file_name}")
-    
+
     try:
         if event.event_type == "Microsoft.Storage.BlobDeleted":
             logger.info(f"Processing delete event for file: {file_name}")
             await delete_from_vector_store(file_name)
             await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
             logger.info(f"Successfully processed delete event for file: {file_name}")
-        
+
         elif event.event_type == "Microsoft.Storage.BlobCreated":
-            # First, check if we need to clean up existing chunks
+            # Clean up existing chunks if necessary
             try:
                 await delete_from_vector_store(file_name)
                 logger.info(f"Cleaned up existing chunks for {file_name}")
             except Exception as e:
                 logger.warning(f"Error cleaning up existing chunks: {str(e)}")
-            
+
             try:
                 # Download the file
                 logger.info(f"Downloading file: {file_name}")
                 temp_file_path = await storage_manager.download_file(file_name)
                 logger.info(f"Successfully downloaded file: {file_name}")
-                
-                try:
-                    # Process the file
-                    file_extension = os.path.splitext(file_name)[1].lower()
-                    logger.info(f"Processing {file_extension} file: {file_name}")
-                    
-                    if file_extension == '.pdf':
-                        elements = partition_pdf(
-                            filename=temp_file_path,
-                            strategy="fast"
-                        )
-                        logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
-                    elif file_extension in ['.doc', '.docx']:
-                        elements = partition_docx(
-                            filename=temp_file_path
-                        )
-                        logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
-                    else:
-                        raise ValueError(f"Unsupported file type: {file_extension}")
-                    
-                    # Chunk the document using title-based chunking
-                    chunks = chunk_by_title(
-                        elements,
-                        max_characters=6000,
-                        new_after_n_chars=5000,
+
+                # Process the file
+                file_extension = os.path.splitext(file_name)[1].lower()
+                logger.info(f"Processing {file_extension} file: {file_name}")
+
+                if file_extension == '.pdf':
+                    elements = partition_pdf(
+                        filename=temp_file_path,
+                        strategy="fast"
                     )
-                    logger.info(f"Created {len(chunks)} chunks from {file_name}")
-                    
-                    # Convert chunks to documents
-                    documents = []
-                    base_id = sanitize_id(file_name)
-                    logger.info(f"Converting chunks to documents for {file_name}")
-                    for i, chunk in enumerate(chunks):
-                        if hasattr(chunk, 'text') and chunk.text.strip():
-                            # Get metadata
-                            metadata = {
-                                "source": file_name
+                    logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
+                elif file_extension in ['.doc', '.docx']:
+                    elements = partition_docx(
+                        filename=temp_file_path
+                    )
+                    logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
+                else:
+                    raise ValueError(f"Unsupported file type: {file_extension}")
+
+                # Chunk the document using title-based chunking
+                chunks = chunk_by_title(
+                    elements,
+                    max_characters=1200,
+                    new_after_n_chars=1000,
+                )
+                logger.info(f"Created {len(chunks)} chunks from {file_name}")
+
+                full_document = " ".join([chunk.text for chunk in chunks if hasattr(chunk, 'text') and chunk.text.strip()])
+
+                # Generate contextualized chunks asynchronously
+                logger.info(f"Generating contextualized chunks for {file_name}")
+                contextualized_chunks = await contextualizer.contextualize_chunks(full_document, [chunk.text for chunk in chunks])
+                logger.info(f"Created {len(contextualized_chunks)} contextualized chunks for {file_name}")
+
+                # Convert contextualized chunks to DocumentIn objects
+                documents = []
+                base_id = sanitize_id(file_name)
+                logger.info(f"Converting contextualized chunks to documents for {file_name}")
+                for i, chunk in enumerate(contextualized_chunks):
+                    if chunk.strip():
+                        # Get metadata
+                        metadata = {
+                            "source": file_name,
+                            "chunk_number": i + 1
+                        }
+                        doc = DocumentIn(
+                            page_content=chunk,
+                            metadata={
+                                **serialize_metadata(metadata),
+                                "last_update": datetime.utcnow().isoformat() + "Z",
+                                "id": f"{base_id}_{i:04d}"
                             }
-                            if hasattr(chunk, 'metadata'):
-                                element_metadata = chunk.metadata.__dict__ if hasattr(chunk.metadata, '__dict__') else chunk.metadata
-                                metadata.update(element_metadata)
-                            
-                            # Extract page numbers
-                            page_numbers = set()
-                            if hasattr(metadata, 'page_number'):
-                                page_num = metadata.page_number
-                                if page_num is not None:
-                                    page_numbers.add(page_num)
-                            elif isinstance(metadata, dict) and 'page_number' in metadata:
-                                page_num = metadata['page_number']
-                                if page_num is not None:
-                                    page_numbers.add(page_num)
-                            
-                            metadata["page_numbers"] = list(sorted(page_numbers)) if page_numbers else None
-                            
-                            # Remove title field from metadata
-                            metadata.pop('title', None)
-                            
-                            # Serialize metadata to ensure JSON compatibility
-                            serialized_metadata = serialize_metadata(metadata)
-                            
-                            doc = DocumentIn(
-                                page_content=chunk.text,
-                                metadata={
-                                    **serialized_metadata,
-                                    "last_update": datetime.utcnow().isoformat() + "Z",
-                                    "id": f"{base_id}_{i:04d}"
-                                }
-                            )
-                            documents.append(doc)
-                    
-                    logger.info(f"Created {len(documents)} documents from chunks for {file_name}")
-                    
-                    # Index the documents
-                    logger.info(f"Starting indexing for {len(documents)} documents from {file_name}")
-                    await index_documents(documents)
-                    logger.info(f"Successfully indexed {len(documents)} documents from {file_name}")
-                    await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
-                    logger.info(f"Completed processing file: {file_name}")
-                except Exception as e:
-                    logger.error(f"Error processing file {file_name}: {str(e)}")
-                    await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
-                    raise
-                finally:
-                    # Clean up temp file
-                    if temp_file_path:
-                        try:
-                            os.unlink(temp_file_path)
-                        except Exception as e:
-                            logger.warning(f"Error cleaning up temp file: {str(e)}")
-            
+                        )
+                        documents.append(doc)
+
+                logger.info(f"Created {len(documents)} documents from contextualized chunks for {file_name}")
+
+                # Index the documents
+                logger.info(f"Starting indexing for {len(documents)} contextualized documents from {file_name}")
+                await index_documents(documents)
+                logger.info(f"Successfully indexed {len(documents)} contextualized documents from {file_name}")
+
+                # Update processing status
+                await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
+                logger.info(f"Completed processing file: {file_name}")
+
             except Exception as e:
-                logger.error(f"Error downloading file {file_name}: {str(e)}")
+                logger.error(f"Error processing file {file_name}: {str(e)}")
                 await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
                 raise
-            
     except Exception as e:
         logger.error(f"Error processing file {file_name}: {str(e)}")
         await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
+        raise
+    finally:
+        try:
+            if 'temp_file_path' in locals() and temp_file_path:
+                os.unlink(temp_file_path)
+        except Exception as e:
+            logger.warning(f"Error cleaning up temp file: {str(e)}")
 
 async def delete_from_vector_store(filename: str) -> dict:
     """
@@ -431,39 +414,40 @@ async def delete_from_vector_store(filename: str) -> dict:
 
 
 @app.post("/index_documents/")
-async def index_documents(documents_in: list[DocumentIn]):
+async def index_documents(documents_in: List[DocumentIn]):
+    """Index documents into Azure Search."""
     logger.info(f"Starting indexing process for {len(documents_in)} documents")
     try:
-        for i, document in enumerate(documents_in, 1):
-            logger.info(f"Processing document {i}/{len(documents_in)}: {document.metadata.get('source', 'unknown')}")
+        # Prepare documents for indexing
+        documents_to_index = []
+        for document in documents_in:
             try:
-                logger.info("Generating embedding...")
                 embedding = embeddings.embed_query(document.page_content)
-                logger.info(f"Generated embedding of size: {len(embedding)}")
             except Exception as e:
                 logger.error(f"Error generating embedding: {str(e)}")
                 continue
-            
-            doc_id = f"doc_{hash(document.page_content)}"
-            logger.info(f"Created document ID: {doc_id}")
-            
+
+            # Determine if the chunk is contextualized based on the presence of context
+            is_contextualized = "\n\n" in document.page_content  # Simple heuristic
+
             document_obj = {
-                "id": doc_id,
+                "id": document.metadata["id"],
                 "content": document.page_content,
                 "content_vector": embedding,
                 "metadata": json.dumps(document.metadata),
                 "source": document.metadata.get("source", "unknown"),
-                "last_update": datetime.utcnow().isoformat() + "Z"
+                "last_update": document.metadata["last_update"],
+                "contextualized": is_contextualized
             }
-            
-            logger.info(f"Indexing document into Azure Search: {doc_id}")
-            try:
-                result = search_client.upload_documents(documents=[document_obj])
-                logger.info(f"Successfully indexed document {i}/{len(documents_in)}")
-            except Exception as e:
-                logger.error(f"Error indexing document {doc_id}: {str(e)}")
-                raise
 
+            documents_to_index.append(document_obj)
+
+        # Upload documents to Azure Search
+        if documents_to_index:
+            result = search_client.upload_documents(documents=documents_to_index)
+            logger.info(f"Successfully indexed {len(documents_to_index)} documents")
+        else:
+            logger.warning("No documents to index.")
     except Exception as e:
         logger.error(f"Error during document indexing: {str(e)}")
         raise

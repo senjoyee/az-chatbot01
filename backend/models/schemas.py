@@ -5,6 +5,7 @@ Pydantic models for the application.
 from datetime import datetime
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
+from langchain_core.documents import Document
 
 class Message(BaseModel):
     """Model for chat messages."""
@@ -37,3 +38,9 @@ class FileProcessingStatus(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     error_message: Optional[str] = None
+
+class AgentState(BaseModel):
+    question: str
+    chat_history: List[Message]
+    documents: Optional[List[Document]] = None
+    response: Optional[str] = None

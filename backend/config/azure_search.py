@@ -76,14 +76,20 @@ fields = [
         filterable=True,  
         sortable=True,  
     ), 
+    SimpleField(
+        name="contextualized",
+        type=SearchFieldDataType.Boolean,
+        filterable=True,
+        sortable=False,
+    )
 ]
 
 # Define scoring profile
 scoring_profile = ScoringProfile(  
     name="content_source_freshness_profile",  
     text_weights=TextWeights(weights={  
-        "content": 5,  # Highest weight for content  
-        "source": 4    # Lower weight for source  
+        "content": 3,  # Highest weight for content  
+        "source": 5    # Lower weight for source  
     }),  
     function_aggregation="sum",  
     functions=[  

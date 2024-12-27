@@ -1,18 +1,41 @@
-# Use an official Python runtime as a parent image
-FROM python:3.11-slim-bookworm
+# Stage 1: Builder
+FROM python:3.11-slim-bookworm as builder
 
-# Set environment variables
+# Set build-time environment variables
 ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PORT=5000
+    PIP_NO_CACHE_DIR=1
+
+# Set the working directory for dependencies
+WORKDIR /build
+
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install build dependencies and Python packages
+COPY requirements.txt .
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && pip install --no-cache-dir -r requirements.txt \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Stage 2: Runtime
+FROM python:3.11-slim-bookworm
+
+# Set runtime environment variables
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=5000 \
+    PATH="/opt/venv/bin:$PATH"
 
 # Set the working directory
 WORKDIR /app
 
-# Install system dependencies
-# These are less likely to change, so we put them first
+# Install runtime system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     libgl1-mesa-glx \
@@ -28,14 +51,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && ldconfig
 
-# Create and activate virtual environment
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Install Python dependencies
-# Copy only requirements.txt first to leverage Docker cache
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
 
 # Create non-root user for security
 RUN adduser --disabled-password --gecos "" appuser
