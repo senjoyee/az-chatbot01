@@ -146,8 +146,7 @@ def retrieve_documents(state: dict) -> dict:
     logger.info(f"Retrieving documents for question: {state.get('question')}")
     state["documents"] = vector_store.hybrid_search(
     state["question"],
-    k=20,
-    #filter="contextualized eq true"
+    k=5,
     )
     return state
 

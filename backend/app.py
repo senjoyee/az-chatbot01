@@ -41,7 +41,7 @@ from pydantic import BaseModel
 from azure_storage import AzureStorageManager, ProcessingStatus
 
 # Import utility functions
-from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata
+from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata, extract_source
 from config.logging_config import setup_logging
 from config.settings import (
     AZURE_SEARCH_SERVICE,
@@ -322,8 +322,8 @@ async def process_file_async(event: BlobEvent):
                 # Chunk the document using title-based chunking
                 chunks = chunk_by_title(
                     elements,
-                    max_characters=1200,
-                    new_after_n_chars=1000,
+                    max_characters=1000,
+                    new_after_n_chars=1200,
                 )
                 logger.info(f"Created {len(chunks)} chunks from {file_name}")
 
@@ -342,7 +342,7 @@ async def process_file_async(event: BlobEvent):
                     if chunk.strip():
                         # Get metadata
                         metadata = {
-                            "source": file_name,
+                            "source": extract_source(file_name),
                             "chunk_number": i + 1
                         }
                         doc = DocumentIn(

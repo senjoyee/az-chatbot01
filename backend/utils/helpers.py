@@ -58,3 +58,37 @@ def serialize_metadata(metadata: dict) -> dict:
             serialized[key] = value
         # Skip any other types that can't be serialized
     return serialized
+
+
+def extract_source(file_name: str) -> str:
+    """
+    Extracts the source identifier from the file name.
+    Examples:
+        - 'TBS SOM 2.3.pdf' -> 'TBS'
+        - 'TBS_SOM 2.3.pdf' -> 'TBS'
+        - 'BSW Document.docx' -> 'BSW'
+    
+    Args:
+        file_name (str): The name of the file
+        
+    Returns:
+        str: The extracted source identifier in uppercase, or 'UNKNOWN' if no valid source found
+    """
+    # Split on first occurrence of space, underscore, or dash
+    parts = file_name.split()
+    if not parts:
+        return "UNKNOWN"
+        
+    # Get first part and clean it
+    first_part = parts[0].strip()
+    
+    # If it contains underscore or dash, split on that
+    if '_' in first_part:
+        first_part = first_part.split('_')[0]
+    elif '-' in first_part:
+        first_part = first_part.split('-')[0]
+        
+    # Ensure it's uppercase and contains only letters
+    source = ''.join(c for c in first_part if c.isalpha()).upper()
+    
+    return source if source else "UNKNOWN"

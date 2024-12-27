@@ -88,8 +88,8 @@ fields = [
 scoring_profile = ScoringProfile(  
     name="content_source_freshness_profile",  
     text_weights=TextWeights(weights={  
-        "content": 3,  # Highest weight for content  
-        "source": 5    # Lower weight for source  
+        "content": 4,  # Lower weight for content  
+        "source": 10    # Higher weight for source
     }),  
     function_aggregation="sum",  
     functions=[  
