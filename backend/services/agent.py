@@ -2,6 +2,8 @@
 
 import logging
 from typing import List, Dict, Any
+import torch
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
@@ -144,11 +146,47 @@ def condense_question(state: dict) -> dict:
 
 def retrieve_documents(state: dict) -> dict:
     logger.info(f"Retrieving documents for question: {state.get('question')}")
-    state["documents"] = vector_store.similarity_search(
+    state["documents"] = vector_store.hybrid_search(
     state["question"],
-    k=5,
-    filters="source eq 'BSW'"
+    k=10,
     )
+    return state
+
+def rerank_documents(state: dict) -> dict:
+    logger.info("Reranking documents")
+    
+    # Initialize model and tokenizer (do this at module level in production)
+    model_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForSequenceClassification.from_pretrained(model_name)
+    
+    query = state["question"]
+    documents = state["documents"]
+    
+    # Prepare inputs for reranking - passing text pairs directly instead of dict
+    text_pairs = [(query, doc.page_content) for doc in documents]
+    inputs = tokenizer.batch_encode_plus(
+        text_pairs,
+        padding=True,
+        truncation=True,
+        return_tensors="pt",
+        max_length=512  # Add max length to prevent too long sequences
+    )
+    
+    # Get scores
+    with torch.no_grad():
+        scores = model(**inputs).logits.squeeze()
+    
+    # Convert scores to list if it's a tensor
+    if torch.is_tensor(scores):
+        scores = scores.tolist()
+    
+    # Sort documents by score
+    scored_docs = list(zip(documents, scores))
+    scored_docs.sort(key=lambda x: x[1], reverse=True)
+    
+    # Update state with reranked documents
+    state["documents"] = [doc for doc, _ in scored_docs]
     return state
 
 def generate_response(state: dict) -> dict:
@@ -187,13 +225,15 @@ builder = StateGraph("agent_state")
 # Add nodes
 builder.add_node("condense_question", condense_question)
 builder.add_node("retrieve_documents", retrieve_documents)
+builder.add_node("rerank_documents", rerank_documents)
 builder.add_node("generate_response", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
 builder.set_entry_point("condense_question")
 builder.add_edge("condense_question", "retrieve_documents")
-builder.add_edge("retrieve_documents", "generate_response")
+builder.add_edge("retrieve_documents", "rerank_documents")
+builder.add_edge("rerank_documents", "generate_response")
 builder.add_edge("generate_response", "update_history")
 builder.add_edge("update_history", END)
 

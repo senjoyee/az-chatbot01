@@ -16,3 +16,6 @@ unstructured[all-docs]
 azure-identity
 python-magic
 azure-data-tables
+transformers
+torch
+sentence-transformers
