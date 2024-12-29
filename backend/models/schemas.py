@@ -41,6 +41,7 @@ class FileProcessingStatus(BaseModel):
 
 class AgentState(BaseModel):
     question: str
+    original_question: Optional[str] = None  # Add this field
     chat_history: List[Message]
     documents: Optional[List[Document]] = None
     response: Optional[str] = None
