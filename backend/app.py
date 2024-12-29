@@ -389,12 +389,15 @@ async def delete_from_vector_store(filename: str) -> dict:
         logger.info(f"Starting deletion process for file: {filename}")
         
         # Escape filename for OData filter
-        escaped_filename = escape_odata_filter_value(filename)
-        logger.info(f"Searching for documents with escaped source: {escaped_filename}")
+        source = extract_source(filename)
+        escaped_source = escape_odata_filter_value(source)
+        logger.info(f"Searching for documents with source: {source}")
+
+        # Search for documents using the source field
         
         documents_to_delete = search_client.search(
-            search_text="",
-            filter=f"source eq '{escaped_filename}'"
+            search_text="*",
+            filter=f"source eq '{escaped_source}'"
         )
         
         deleted_count = 0

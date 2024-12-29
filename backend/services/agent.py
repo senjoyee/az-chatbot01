@@ -18,9 +18,17 @@ from config.settings import (
     AZURE_OPENAI_ENDPOINT
 )
 from config.azure_search import vector_store
-from models.schemas import Message
+from models.schemas import Message, AgentState
 
 logger = logging.getLogger(__name__)
+
+# Constants for reranking
+RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# Initialize reranking model and tokenizer globally
+logger.info(f"Initializing reranking model: {RERANKER_MODEL_NAME}")
+reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_NAME)
+reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_NAME)
 
 # Initialize the language model
 llm = AzureChatOpenAI(
@@ -28,7 +36,8 @@ llm = AzureChatOpenAI(
     openai_api_version="2023-03-15-preview",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
     api_key=AZURE_OPENAI_API_KEY,
-    temperature=0.3
+    temperature=0.3,
+    top_p=0.7
 )
 
 # Prompt templates
@@ -82,7 +91,7 @@ IMPORTANT GUIDELINES:
    Answer:
    - **If sufficient information exists**
     **Summary:**
-    [2-3 sentence overview]
+    [1 sentence overview]
 
     **Detailed Response:**
     1. [First main point]
@@ -148,34 +157,29 @@ def retrieve_documents(state: dict) -> dict:
     logger.info(f"Retrieving documents for question: {state.get('question')}")
     state["documents"] = vector_store.hybrid_search(
     state["question"],
-    k=10,
+    k=20,
     )
     return state
 
 def rerank_documents(state: dict) -> dict:
     logger.info("Reranking documents")
     
-    # Initialize model and tokenizer (do this at module level in production)
-    model_name = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForSequenceClassification.from_pretrained(model_name)
-    
     query = state["question"]
     documents = state["documents"]
     
     # Prepare inputs for reranking - passing text pairs directly instead of dict
     text_pairs = [(query, doc.page_content) for doc in documents]
-    inputs = tokenizer.batch_encode_plus(
+    inputs = reranker_tokenizer.batch_encode_plus(
         text_pairs,
         padding=True,
         truncation=True,
         return_tensors="pt",
-        max_length=512  # Add max length to prevent too long sequences
+        max_length=512
     )
     
     # Get scores
     with torch.no_grad():
-        scores = model(**inputs).logits.squeeze()
+        scores = reranker_model(**inputs).logits.squeeze()
     
     # Convert scores to list if it's a tensor
     if torch.is_tensor(scores):
@@ -195,8 +199,13 @@ def generate_response(state: dict) -> dict:
         logger.error("No documents found in state.")
         raise ValueError("No documents found to generate a response.")
 
-    context = "\n\n".join([doc.page_content for doc in state["documents"]])
-    logger.debug(f"Formatted context: {context}")
+    # Take only top 5 documents after reranking
+    top_documents = state["documents"][:5]  # Get top 3 reranked documents
+    logger.info(f"Using top 3 documents for response generation")
+    
+    # Create context from top 3 documents
+    context = "\n\n".join([doc.page_content for doc in top_documents])
+    logger.debug(f"Using context from top 5 documents")
 
     _input = (
         RunnableLambda(lambda s: {"context": s["context"], "question": s["question"]})
@@ -220,7 +229,7 @@ def update_history(state: dict) -> dict:
     return state
 
 # Build the Langgraph
-builder = StateGraph("agent_state")
+builder = StateGraph(AgentState)
 
 # Add nodes
 builder.add_node("condense_question", condense_question)

@@ -17,35 +17,23 @@ class Contextualizer:
             openai_api_version="2023-03-15-preview",
             azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
             api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-            temperature=0.3,
+            temperature=0.0,
             streaming=False  # Ensure streaming is disabled for async calls
         )
         logger.debug("AzureChatOpenAI initialized successfully.")
 
         # Define the prompt template for context generation using message roles
         self.context_prompt = ChatPromptTemplate.from_template("""
-        You are an AI assistant specializing in document analysis. Your task is to provide brief, relevant context for a chunk of text from the given document.
         Here is the document:
         <document>
         {document}
         </document>
-
         Here is the chunk we want to situate within the whole document:
         <chunk>
         {chunk}
         </chunk>
-
-        Provide a concise context (2-3 sentences) for this chunk, considering the following guidelines:
-        1. Identify the main topic or concept discussed in the chunk.
-        2. Mention any relevant information or comparisons from the broader document context.
-        3. If applicable, note how this information relates to the overall theme or purpose of the document.
-        4. Include any key figures, dates, or percentages that provide important context.
-        5. Do not use phrases like "This chunk discusses" or "This section provides". Instead, directly state the context.
-
         Please give a short succinct context to situate this chunk within the overall document for the purposes of improving search retrieval of the chunk. Answer only with the succinct context and nothing else.
-
-        Context:
-        """)
+""")
 
     async def generate_context_async(self, document: str, chunk: str) -> str:
         """
@@ -65,16 +53,16 @@ class Contextualizer:
 
         # Structure messages with roles
         messages = [
-            SystemMessage(content="You are a helpful assistant that provides contextual information."),
+            SystemMessage(content="You are an AI assistant specializing in document analysis. Your task is to provide brief, relevant context for a chunk of text from the given document."),
             HumanMessage(content=prompt)
         ]
         logger.debug(f"Generated messages for LLM: {messages}")
 
         try:
             # Use the appropriate asynchronous method
-            response = await self.llm.arun(messages)  # Use 'arun' for asynchronous calls
+            response = await self.llm.ainvoke(messages)  # Use 'arun' for asynchronous calls
             logger.debug(f"LLM Response: {response}")
-            context = response.strip()
+            context = response.content.strip()
             logger.debug(f"Generated context: {context}")
             return context
         except Exception as e:
