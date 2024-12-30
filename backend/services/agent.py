@@ -40,6 +40,15 @@ llm = AzureChatOpenAI(
     top_p=0.7
 )
 
+llm_4o = AzureChatOpenAI(
+    azure_deployment="gpt-4o",
+    openai_api_version="2024-08-01-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_API_KEY,
+    temperature=0.1,
+    top_p=0.9
+)
+
 # Prompt templates
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
@@ -48,24 +57,6 @@ Chat History:
 Follow Up Input: {question}
 Standalone question:"""
 CONDENSE_QUESTION_PROMPT = ChatPromptTemplate.from_template(condense_question_template)
-
-reasoning_template = """You are an expert query rewriter for a retrieval-augmented generation (RAG) chatbot. Your goal is to take a user's original query and rewrite it to be more effective at retrieving relevant information from a knowledge base. The rewritten query should be clear, specific, and include relevant keywords to maximize the chances of finding the most helpful documents.
-
-Here's the original user query:
-
-Original Query: {question}
-
-Rewrite the above query, keeping the following in mind:
-
-Clarity and Specificity: Make the query as clear and specific as possible. Avoid vague language or ambiguous terms.
-Keywords: Identify and include the most important keywords related to the user's intent. Consider synonyms and related terms.
-Context (if needed): If the original query lacks necessary context, add relevant context to help the retrieval process. However, avoid adding unnecessary information.
-Focus on the Core Need: Ensure the rewritten query directly addresses the user's underlying information need.
-Question Format (if appropriate): If the original query is not in the form of a question, consider rephrasing it as a clear question.
-Avoid Jargon (unless necessary): Use common language unless the topic specifically requires technical terms.
-Maintain User Intent: Do not change the fundamental meaning or goal of the original query.
-Rewritten Query:"""
-REASONING_PROMPT = ChatPromptTemplate.from_template(reasoning_template)
 
 answer_template = """
 Please provide an answer based strictly on the following context:
@@ -187,7 +178,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     state.documents = vector_store.hybrid_search(
         state.question,
-        k=10,
+        k=5,
     )
     return state
 
@@ -243,7 +234,7 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm
+        | llm_4o
         | StrOutputParser()
     )
     
@@ -265,7 +256,6 @@ builder = StateGraph(AgentState)
 
 # Add nodes
 builder.add_node("condense_question", condense_question)
-builder.add_node("reason_about_query", reason_about_query) # Add the new reasoning node
 builder.add_node("retrieve_documents", retrieve_documents)
 builder.add_node("rerank_documents", rerank_documents)
 builder.add_node("generate_response", generate_response)
@@ -273,8 +263,7 @@ builder.add_node("update_history", update_history)
 
 # Add edges
 builder.set_entry_point("condense_question")
-builder.add_edge("condense_question", "reason_about_query") # Connect condense_question to reasoning
-builder.add_edge("reason_about_query", "retrieve_documents") # Connect reasoning to retrieval
+builder.add_edge("condense_question", "retrieve_documents") # Connect condense_question to retrieval
 builder.add_edge("retrieve_documents", "rerank_documents")
 builder.add_edge("rerank_documents", "generate_response")
 builder.add_edge("generate_response", "update_history")

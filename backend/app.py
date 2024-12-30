@@ -322,8 +322,8 @@ async def process_file_async(event: BlobEvent):
                 # Chunk the document using title-based chunking
                 chunks = chunk_by_title(
                     elements,
-                    max_characters=1000,
-                    new_after_n_chars=1200,
+                    max_characters=5000,
+                    new_after_n_chars=6000,
                 )
                 logger.info(f"Created {len(chunks)} chunks from {file_name}")
 
