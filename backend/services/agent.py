@@ -56,81 +56,52 @@ Chat History:
 {chat_history}
 Follow Up Input: {question}
 Standalone question:"""
-CONDENSE_QUESTION_PROMPT = ChatPromptTemplate.from_template(condense_question_template)
+CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_question_template)
 
 answer_template = """
-Please provide an answer based strictly on the following context:
-<context>
+You are an AI assistant designed to answer questions based on provided documents. These documents may include service operating manuals, contract documents, or other relevant information. Your task is to analyze the given documents and use them to answer user questions accurately and helpfully.
+
+First, carefully read and analyze the following documents:
+
+<documents>
 {context}
-</context>
+</documents>
 
-IMPORTANT GUIDELINES:
-1. **Content Reliance**
-   - Do not invent or infer information not explicitly found in the context.
-   - If context is insufficient, clearly state what is missing.
+As you read through the documents, pay attention to key information, important details, and any specific instructions or clauses that might be relevant to potential user questions. Create a mental index of the main topics and sections within the documents for quick reference.
 
-2. **Structure & Hierarchy**
-   a. Use clear hierarchical numbering (1., 2., 3. for main points).
-   b. Use indented sub-points (a., b., c.).
-   c. Group related information logically.
-   d. Maintain consistent indentation for visual hierarchy.
+Now, a user has asked the following question:
 
-3. **Visual Formatting**
-   a. Use Markdown for emphasis:
-    - **Bold** for headers
-    - *Italic* for emphasis
-    - `code` for technical terms
-    - > blockquotes for important quotes
-   b. Use tables for structured data where relevant.
-   c. Insert single line breaks between sections.
-   d. Avoid extra spacing between bullet points.
+<user_question>
+{question}
+</user_question>
 
-4. **Content Organization**
-   a. Begin with a concise *Summary*.
-   b. Present information in order of importance.
-   c. Use transition sentences between major sections.
-   d. End with a conclusion or next steps, if applicable.
-   e. Write succinctly; avoid redundant details and keep explanations clear.
+To answer the user's question, follow these steps:
 
-5. **Question & Answer Structure**
-   Question: {question}
+1. Identify the main topic(s) of the question and search for relevant information within the provided documents.
 
-   Answer:
-   - **If sufficient information exists**
-    **Summary:**
-    [1 sentence overview]
+2. If you find information directly related to the question, use it to formulate your answer. Be sure to paraphrase the information rather than quoting it verbatim, unless a direct quote is necessary for accuracy or clarity.
 
-    **Detailed Response:**
-    1. [First main point]
-    a. [Supporting detail]
-    b. [Supporting detail]
-    2. [Second main point]
-    a. [Supporting detail]
-    b. [Supporting detail]
+3. If the question is not directly addressed in the documents, use your understanding of the overall content to provide the best possible answer. In this case, make it clear that your response is based on your interpretation of the available information.
 
-   - **If information is incomplete**
-    **Available Information:**
-    1. [Available information point]
-    a. [Supporting detail]
+4. If the question cannot be answered using the provided documents, politely inform the user that the information is not available in the current documentation.
 
-    **Information Gaps:**
-    1. [Missing elements]
-    a. [Specific missing details]
-    b. [Impact on completeness]
+5. If appropriate, provide additional context or related information that might be helpful to the user, even if it doesn't directly answer their question.
 
-   - **If no relevant information**
-    **Notice:** The provided context does not contain information to answer this question.
-    **Suggested Alternative:** [If applicable, suggest related topics]
+6. If the user's question is unclear or too broad, ask for clarification to ensure you provide the most accurate and helpful response.
 
-6. **Quality Checks**
-   ✓ Ensure points are supported by the provided context only.
-   ✓ Identify and highlight any information gaps.
-   ✓ Provide consistent formatting.
-   ✓ Include direct citations or references from the context where relevant.
-   ✓ Keep the response concise by avoiding unnecessary or repetitive details.
+When formulating your answer, keep the following in mind:
+
+- Be concise and to the point, while still providing comprehensive information.
+- Use clear and simple language, avoiding jargon unless it's specifically relevant to the topic.
+- If discussing technical procedures or contract terms, be precise and accurate.
+- Maintain a professional and helpful tone throughout your response.
+
+Provide your answer within <answer> tags. If you need to ask for clarification, do so before providing your answer. If you're unsure about any part of your response, indicate this clearly to the user.
+
+Remember, your goal is to provide accurate, helpful information based on the documents provided, while maintaining a friendly and professional demeanor.
 """
 
-ANSWER_PROMPT = ChatPromptTemplate.from_template(answer_template)
+ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
 def format_chat_history(chat_history: List[Message]) -> str:
     """Format chat history for the model."""
@@ -238,7 +209,12 @@ def generate_response(state: AgentState) -> AgentState:
         | StrOutputParser()
     )
     
-    state.response = _input.invoke(state)
+    response = _input.invoke(state)
+    
+    # Strip <answer> tags from the response
+    response = response.replace("<answer>", "").replace("</answer>", "").strip()
+    
+    state.response = response
     return state
 
 def update_history(state: AgentState) -> AgentState:
