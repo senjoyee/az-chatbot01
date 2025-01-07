@@ -31,7 +31,7 @@ reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_NAME)
 reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_NAME)
 
 # Initialize the language model
-llm = AzureChatOpenAI(
+llm_4o_mini = AzureChatOpenAI(
     azure_deployment="gpt-4o-mini",
     openai_api_version="2023-03-15-preview",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
@@ -50,6 +50,27 @@ llm_4o = AzureChatOpenAI(
 )
 
 # Prompt templates
+
+query_reasoning_template = """
+You are tasked with rewriting a user's query to make it more likely to match relevant documents in a retrieval system. The goal is to transform the query into a more assertive and focused form that will improve search results.
+
+Follow these guidelines when rewriting the query:
+1. Use an assertive tone
+2. Be more specific and detailed
+3. Include relevant keywords
+4. Remove unnecessary words or phrases
+5. Structure the query as a statement rather than a question, if applicable
+6. Maintain the original intent of the query
+
+Here is the user's original query:
+<user_query>
+{question}
+</user_query>
+
+Rewrite the query following the guidelines above. Think carefully about how to improve the query's effectiveness in retrieving relevant documents.
+"""
+
+QUERY_REASONING_PROMPT = PromptTemplate.from_template(query_reasoning_template)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
@@ -124,7 +145,7 @@ def condense_question(state: AgentState) -> AgentState:
             "question": x.question
         })
         | CONDENSE_QUESTION_PROMPT
-        | llm
+        | llm_4o_mini
         | StrOutputParser()
     )
     result = _input.invoke(state)
@@ -135,8 +156,8 @@ def reason_about_query(state: AgentState) -> AgentState:
     logger.info(f"Reasoning about query with state: {state}")
     _input = (
         RunnableLambda(lambda x: {"question": x.question})
-        | REASONING_PROMPT
-        | llm
+        | QUERY_REASONING_PROMPT
+        | llm_4o_mini   
         | StrOutputParser()
     )
     rewritten_query = _input.invoke(state)
@@ -149,7 +170,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     state.documents = vector_store.hybrid_search(
         state.question,
-        k=5,
+        k=10,
     )
     return state
 
@@ -231,19 +252,23 @@ def update_history(state: AgentState) -> AgentState:
 builder = StateGraph(AgentState)
 
 # Add nodes
-builder.add_node("condense_question", condense_question)
-builder.add_node("retrieve_documents", retrieve_documents)
-builder.add_node("rerank_documents", rerank_documents)
-builder.add_node("generate_response", generate_response)
+builder.add_node("condense", condense_question)
+builder.add_node("reason", reason_about_query)  # Add the reasoning node
+builder.add_node("retrieve", retrieve_documents)
+builder.add_node("rerank", rerank_documents)
+builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-builder.set_entry_point("condense_question")
-builder.add_edge("condense_question", "retrieve_documents") # Connect condense_question to retrieval
-builder.add_edge("retrieve_documents", "rerank_documents")
-builder.add_edge("rerank_documents", "generate_response")
-builder.add_edge("generate_response", "update_history")
+builder.add_edge("condense", "reason")  # Connect condense to reason
+builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
+builder.add_edge("retrieve", "rerank")
+builder.add_edge("rerank", "generate")
+builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
+
+# Set entry point
+builder.set_entry_point("condense")
 
 # Compile the graph
 agent = builder.compile()
