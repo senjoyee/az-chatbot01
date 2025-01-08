@@ -1,23 +1,25 @@
-// api.ts
-
 const API_BASE_URL = 'https://jscbbackend01.azurewebsites.net';
 
 // Error handling utility
 const handleApiError = (error: any, operation: string) => {
+  console.error(`Error during ${operation}:`, error);
   if (error instanceof TypeError && error.message === 'Failed to fetch') {
-    console.error(`CORS or network error during ${operation}:`, error);
     throw new Error(`Network error: Please check your connection or CORS configuration`);
   }
   throw error;
 };
 
-export const uploadFiles = async (files: File[]) => {
-  // Add file size validation
+export interface FileWithCustomer {
+  file: File;
+  customerName: string;
+}
+
+export const uploadFiles = async (filesWithCustomers: FileWithCustomer[]) => {
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
   const MAX_TOTAL_SIZE = 500 * 1024 * 1024; // 500MB
   
   // Calculate total size
-  const totalSize = files.reduce((sum, file) => sum + file.size, 0);
+  const totalSize = filesWithCustomers.reduce((sum, { file }) => sum + file.size, 0);
   
   // Validate total size
   if (totalSize > MAX_TOTAL_SIZE) {
@@ -25,14 +27,17 @@ export const uploadFiles = async (files: File[]) => {
   }
   
   // Validate individual files
-  for (const file of files) {
+  for (const { file } of filesWithCustomers) {
     if (file.size > MAX_FILE_SIZE) {
       throw new Error(`File ${file.name} exceeds ${MAX_FILE_SIZE / (1024 * 1024)}MB limit`);
     }
   }
 
   const formData = new FormData();
-  files.forEach((file) => formData.append('files', file));
+  filesWithCustomers.forEach(({ file, customerName }, index) => {
+    formData.append(`files`, file);
+    formData.append(`customer_names`, customerName);
+  });
 
   try {
     const response = await fetch(`${API_BASE_URL}/uploadfiles`, {
@@ -150,6 +155,11 @@ export const getDocumentContent = async (filename: string) => {
   }
 };
 
+export interface Message {
+  sender: 'user' | 'assistant';
+  text: string;
+}
+
 export const sendMessage = async (
   question: string,
   conversation: Message[]
@@ -184,3 +194,4 @@ export const sendMessage = async (
     throw error;
   }
 };
+

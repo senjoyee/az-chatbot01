@@ -2,7 +2,7 @@ import os
 import logging
 from operator import itemgetter
 from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, File, HTTPException, UploadFile, Query
+from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from azure.search.documents import SearchClient
@@ -217,15 +217,24 @@ async def delete_file(filename: str):
 
 
 @app.post("/uploadfiles")
-async def upload_files(files: list[UploadFile] = File(...)):
+async def upload_files(files: list[UploadFile] = File(...),
+                       customer_names: list[str] = Form(...)):  # New parameter to receive customer names
     try:
+        # Check if the number of files and customer names match
+        if len(files) != len(customer_names):
+            logger.error("Number of files and customer names do not match.")
+            raise HTTPException(
+                status_code=400,
+                detail="Number of files and customer names do not match."
+            )
+
         # Add size validation
         MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
         
         container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
         uploaded_files = []
 
-        for file in files:
+        for file, customer_name in zip(files, customer_names):
             # Validate file size
             contents = await file.read()
             if len(contents) > MAX_FILE_SIZE:
@@ -236,7 +245,9 @@ async def upload_files(files: list[UploadFile] = File(...)):
                 
             try:
                 blob_client = container_client.get_blob_client(blob=file.filename)
-                blob_client.upload_blob(contents, overwrite=True)
+                blob_client.upload_blob(contents,
+                overwrite=True,
+                metadata={"customer": customer_name})
                 uploaded_files.append(file.filename)
             except Exception as e:
                 logger.error(f"Error uploading file {file.filename}: {str(e)}")
@@ -301,6 +312,14 @@ async def process_file_async(event: BlobEvent):
                 temp_file_path = await storage_manager.download_file(file_name)
                 logger.info(f"Successfully downloaded file: {file_name}")
 
+                # Get customer from blob metadata
+                container_client = storage_manager.blob_service_client.get_container_client(BLOB_CONTAINER)
+                blob_client = container_client.get_blob_client(blob=file_name)
+                blob_properties = blob_client.get_blob_properties()
+                customer_name = blob_properties.metadata.get("customer", "unknown")
+                logger.info(f"Retrieved customer name from metadata: {customer_name}")
+
+
                 # Process the file
                 file_extension = os.path.splitext(file_name)[1].lower()
                 logger.info(f"Processing {file_extension} file: {file_name}")
@@ -342,8 +361,9 @@ async def process_file_async(event: BlobEvent):
                     if chunk.strip():
                         # Get metadata
                         metadata = {
-                            "source": extract_source(file_name),
-                            "chunk_number": i + 1
+                            "source": file_name,
+                            "chunk_number": i + 1,
+                            "customer": customer_name
                         }
                         doc = DocumentIn(
                             page_content=chunk,
@@ -389,7 +409,7 @@ async def delete_from_vector_store(filename: str) -> dict:
         logger.info(f"Starting deletion process for file: {filename}")
         
         # Escape filename for OData filter
-        source = extract_source(filename)
+        source = filename
         escaped_source = escape_odata_filter_value(source)
         logger.info(f"Searching for documents with source: {source}")
 
@@ -439,6 +459,7 @@ async def index_documents(documents_in: List[DocumentIn]):
                 "content_vector": embedding,
                 "metadata": json.dumps(document.metadata),
                 "source": document.metadata.get("source", "unknown"),
+                "customer": document.metadata.get("customer", "unknown").lower(),
                 "last_update": document.metadata["last_update"],
                 "contextualized": is_contextualized
             }
