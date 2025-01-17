@@ -1,13 +1,14 @@
 # services/agent.py
 
 import logging
+import json
 from typing import List, Dict, Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, START, END
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.schema import StrOutputParser
@@ -134,6 +135,41 @@ def format_chat_history(chat_history: List[Message]) -> str:
             buffer.append(f"Assistant: {message.content}")
     return "\n".join(buffer)
 
+def detect_customer_name(state: AgentState) -> AgentState:
+    # Create a prompt template for customer name detection
+    customer_detection_prompt = ChatPromptTemplate.from_messages([
+        ("system", "Analyze the following question and determine if it mentions a specific customer name. Output JSON format with fields: has_customer_name (boolean) and customer_name (string or null)"),
+        ("user", "{question}")
+    ])
+    
+    # Chain for customer detection
+    chain = (
+        customer_detection_prompt 
+        | llm_4o_mini 
+        | StrOutputParser() 
+        | json.loads
+    )
+    
+    # Run detection
+    result = chain.invoke({"question": state.question})
+    state.customer_name = result["customer_name"]
+    state.needs_customer_prompt = not result["has_customer_name"]
+    
+    return state
+
+def generate_customer_prompt(state: AgentState) -> AgentState:
+    if state.needs_customer_prompt:
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", "Generate a polite prompt asking the user if they want to specify a customer name for their query."),
+            ("user", "Generate prompt for question: {question}")
+        ])
+        
+        response = prompt | llm_4o_mini | StrOutputParser()
+        state.awaiting_customer_response = True
+        state.response = response.invoke({"question": state.question})
+        return state
+    return state
+
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
     if not state.chat_history:  # Empty history
@@ -252,6 +288,8 @@ def update_history(state: AgentState) -> AgentState:
 builder = StateGraph(AgentState)
 
 # Add nodes
+builder.add_node("detect_customer", detect_customer_name)
+builder.add_node("customer_prompt", generate_customer_prompt)
 builder.add_node("condense", condense_question)
 builder.add_node("reason", reason_about_query)  # Add the reasoning node
 builder.add_node("retrieve", retrieve_documents)
@@ -260,15 +298,31 @@ builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
+builder.add_edge(START, "detect_customer")
+builder.add_conditional_edges(
+    "detect_customer",
+    lambda x: "customer_prompt" if x.needs_customer_prompt else "condense",
+    {
+        "customer_prompt": "customer_prompt",
+        "condense": "condense"
+    }
+)
+
+# Add edge from customer prompt to end (when we need to wait for user response)
+builder.add_conditional_edges(
+    "customer_prompt",
+    lambda x: END if x.awaiting_customer_response else "condense",
+    {
+        END: END,
+        "condense": "condense"
+    }
+)
 builder.add_edge("condense", "reason")  # Connect condense to reason
 builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
-
-# Set entry point
-builder.set_entry_point("condense")
 
 # Compile the graph
 agent = builder.compile()

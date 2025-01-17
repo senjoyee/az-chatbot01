@@ -45,3 +45,6 @@ class AgentState(BaseModel):
     chat_history: List[Message]
     documents: Optional[List[Document]] = None
     response: Optional[str] = None
+    customer_name: Optional[str] = None
+    needs_customer_prompt: bool = False
+    awaiting_customer_response: bool = False
