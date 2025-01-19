@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  PYTHON_VERSION: '3.11'
+  WORKING_DIRECTORY: ./backend
+
 jobs:
   deploy-backend:
     runs-on: ubuntu-latest
@@ -16,56 +20,87 @@ jobs:
       - name: Set up Python version
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: |
+            ${{ env.WORKING_DIRECTORY }}/requirements.txt
+
+      # Cache the virtual environment
+      - name: Cache virtual environment
+        uses: actions/cache@v3
+        with:
+          path: ${{ env.WORKING_DIRECTORY }}/.venv
+          key: venv-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            venv-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
 
       - name: Create and start virtual environment
         run: |
-          python -m venv venv
-          source venv/bin/activate
+          python -m venv .venv
+          source .venv/bin/activate
+          python -m pip install --upgrade pip
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+
+      # Cache pip packages
+      - name: Cache pip packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-py${{ env.PYTHON_VERSION }}-
+
+      - name: Install dependencies
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: |
+          source .venv/bin/activate
+          pip install -r requirements.txt
 
       # Add startup script for system dependencies
       - name: Create startup script
-        working-directory: ./backend
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
           echo "# startup.txt" > startup.txt
           echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0 && gunicorn --bind=0.0.0.0 --timeout 600 app:app" >> startup.txt
-
-      - name: Create runtime script
-        working-directory: ./backend
-        run: |
-          echo "# requirements.txt" > requirements.txt.new
-          cat requirements.txt >> requirements.txt.new
-          mv requirements.txt.new requirements.txt
-
-      - name: Install dependencies
-        working-directory: ./backend
-        run: pip install -r requirements.txt
         
       - name: List backend directory contents
         run: |
           echo "Backend directory contents:"
-          ls -R backend/
+          ls -R ${{ env.WORKING_DIRECTORY }}/
+
+      # Cache the zip artifact
+      - name: Cache deployment artifact
+        uses: actions/cache@v3
+        id: artifact-cache
+        with:
+          path: ${{ env.WORKING_DIRECTORY }}/release.zip
+          key: deploy-${{ github.sha }}
+          restore-keys: |
+            deploy-
 
       - name: Zip artifact for deployment
+        if: steps.artifact-cache.outputs.cache-hit != 'true'
+        working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
-          cd backend
-          zip release.zip ./* -r
+          zip release.zip ./* -r -x ".venv/*"
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
         with:
           name: python-app
-          path: |
-            backend/release.zip
-            !venv/
+          path: ${{ env.WORKING_DIRECTORY }}/release.zip
+          compression-level: 9
+          retention-days: 1
 
       - name: Download artifact for deployment
         uses: actions/download-artifact@v4
         with:
           name: python-app
+          path: ${{ env.WORKING_DIRECTORY }}
 
       - name: Unzip artifact for deployment
-        run: unzip release.zip
+        working-directory: ${{ env.WORKING_DIRECTORY }}
+        run: unzip -o release.zip
       
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
