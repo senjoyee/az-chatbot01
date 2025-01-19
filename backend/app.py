@@ -38,7 +38,7 @@ from enum import Enum
 from datetime import datetime
 from typing import Dict, Optional
 from pydantic import BaseModel
-from azure_storage import AzureStorageManager, ProcessingStatus
+from models.azure_storage import AzureStorageManager, ProcessingStatus
 
 # Import utility functions
 from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata, extract_source
