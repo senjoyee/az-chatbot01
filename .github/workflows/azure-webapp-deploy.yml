@@ -8,7 +8,7 @@ on:
 
 jobs:
   deploy-backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
     - uses: actions/checkout@v2
@@ -37,9 +37,10 @@ jobs:
         app-name: ${{ secrets.AZURE_BACKEND_APP_NAME }}
         publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
         package: ./backend
+        clean: true
 
   deploy-frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     
     steps:
     - uses: actions/checkout@v2
@@ -83,3 +84,4 @@ jobs:
         app-name: ${{ secrets.AZURE_FRONTEND_APP_NAME }}
         publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
         package: ./frontend/.next
+        clean: true
