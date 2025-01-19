@@ -15,17 +15,6 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Maximize build space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          # all of these default to true, but we're being explicit here
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          docker-images: true
-          swap-storage: true
-
       - uses: actions/checkout@v4
 
       - name: Set up Python version
