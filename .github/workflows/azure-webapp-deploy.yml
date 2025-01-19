@@ -31,6 +31,13 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r backend/requirements.txt
 
+    - name: List backend directory contents
+      run: |
+        echo "Backend directory contents:"
+        ls -R backend/
+        echo "Content of app.py:"
+        cat backend/app.py
+
     - name: Deploy Backend to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
