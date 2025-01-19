@@ -4,10 +4,11 @@ import logging
 import json
 from typing import List, Dict, Any
 import torch
+import requests
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_community.utilities import GoogleSerperAPIWrapper
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, START, END
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
@@ -16,12 +17,16 @@ from langchain_core.documents import Document
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
-    AZURE_OPENAI_ENDPOINT
+    AZURE_OPENAI_ENDPOINT,
+    SERPER_API_KEY
 )
 from config.azure_search import vector_store
 from models.schemas import Message, AgentState
 
 logger = logging.getLogger(__name__)
+
+# Initialize the search wrapper
+search = GoogleSerperAPIWrapper()
 
 # Constants for reranking
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -51,6 +56,31 @@ llm_4o = AzureChatOpenAI(
 )
 
 # Prompt templates
+
+# Add new prompt for search type determination
+determine_search_type_template = """Analyze the following question and determine if it requires internal document search or web search.
+
+Question: {question}
+
+Consider these guidelines:
+1. Use internal search for:
+   - Questions about specific customers, contracts, or company documents
+   - Internal business processes or policies
+   - Customer-specific information
+2. Use web search for:
+   - General knowledge questions
+   - Industry trends or news
+   - Technical information not specific to customers
+   - Public information or current events
+
+Respond in JSON format:
+{
+    "use_web_search": boolean,
+    "reasoning": "brief explanation"
+}
+"""
+
+DETERMINE_SEARCH_TYPE_PROMPT = PromptTemplate.from_template(determine_search_type_template)
 
 query_reasoning_template = """
 You are tasked with rewriting a user's query to make it more likely to match relevant documents in a retrieval system. The goal is to transform the query into a more assertive and focused form that will improve search results.
@@ -242,36 +272,110 @@ def rerank_documents(state: AgentState) -> AgentState:
     state.documents = [doc for doc, _ in scored_docs]
     return state
 
+def determine_search_type(state: AgentState) -> AgentState:
+    """Determine if the question needs web search or internal search."""
+    chain = DETERMINE_SEARCH_TYPE_PROMPT | llm_4o_mini | StrOutputParser() | json.loads
+    
+    try:
+        result = chain.invoke({"question": state.question})
+        if not isinstance(result, dict) or "use_web_search" not in result:
+            logger.error("Invalid response format from search type determination")
+            state.use_web_search = False
+            return state
+            
+        state.use_web_search = result["use_web_search"]
+        logger.info(f"Search type determination: {result.get('reasoning', 'No reasoning provided')}")
+    except json.JSONDecodeError:
+        logger.error("Failed to parse search type determination response")
+        state.use_web_search = False
+    except Exception as e:
+        logger.error(f"Error determining search type: {str(e)}")
+        state.use_web_search = False
+    
+    return state
+
+def perform_web_search(state: AgentState) -> AgentState:
+    """Perform web search using GoogleSerperAPIWrapper."""
+    if not state.use_web_search:
+        return state
+        
+    if not SERPER_API_KEY:
+        logger.error("SERPER_API_KEY not configured")
+        state.use_web_search = False
+        return state
+        
+    try:
+        # Use the wrapper to perform the search
+        results = search.results(state.question, num_results=3)
+        
+        if not results:
+            logger.warning("No search results found")
+            state.web_results = "No relevant information found from web search."
+            return state
+            
+        # Format the results
+        formatted_results = []
+        for item in results:
+            result = f"Title: {item.get('title', 'No title')}\n"
+            result += f"Snippet: {item.get('snippet', 'No snippet')}\n"
+            result += f"Link: {item.get('link', 'No link')}\n"
+            formatted_results.append(result)
+        
+        state.web_results = "\n\n".join(formatted_results)
+        logger.info(f"Web search completed successfully with {len(formatted_results)} results")
+            
+    except Exception as e:
+        logger.error(f"Error in web search: {str(e)}")
+        state.web_results = None
+        state.use_web_search = False
+    
+    return state
+
+
 def generate_response(state: AgentState) -> AgentState:
+    """Generate response using either web search results or internal documents."""
     logger.info("Generating response")
     
-    if not state.documents:
-        state.response = "I couldn't find any relevant information to answer your question."
-        return state
+    # Prepare context based on search type
+    if state.use_web_search:
+        if not state.web_results:
+            state.response = "I apologize, but I couldn't retrieve any information from the web search. Please try rephrasing your question or asking something else."
+            return state
+        context = f"Web Search Results:\n{state.web_results}"
+    else:
+        if not state.documents:
+            state.response = "I couldn't find any relevant information in our internal documents to answer your question."
+            return state
+        # Use top K documents for internal search
+        TOP_K_DOCUMENTS = 3
+        top_documents = state.documents[:TOP_K_DOCUMENTS]
+        context = "\n\n".join(doc.page_content for doc in top_documents)
+        logger.info(f"Using {len(top_documents)} internal documents")
     
-    # Use only top K documents
-    TOP_K_DOCUMENTS = 3
-    top_documents = state.documents[:TOP_K_DOCUMENTS]
+    try:
+        # Generate response using the appropriate context
+        _input = (
+            RunnableLambda(lambda x: {
+                "context": context,
+                "question": x.question
+            })
+            | ANSWER_PROMPT
+            | llm_4o
+            | StrOutputParser()
+        )
+        
+        response = _input.invoke(state)
+        response = response.replace("<answer>", "").replace("</answer>", "").strip()
+        
+        if not response:
+            state.response = "I apologize, but I couldn't generate a meaningful response. Please try rephrasing your question."
+        else:
+            state.response = response
+            
+    except Exception as e:
+        logger.error(f"Error generating response: {str(e)}")
+        state.response = "I encountered an error while generating the response. Please try again."
     
-    context = "\n\n".join(doc.page_content for doc in top_documents)
-    logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
-    
-    _input = (
-        RunnableLambda(lambda x: {
-            "context": context,
-            "question": x.question
-        })
-        | ANSWER_PROMPT
-        | llm_4o
-        | StrOutputParser()
-    )
-    
-    response = _input.invoke(state)
-    
-    # Strip <answer> tags from the response
-    response = response.replace("<answer>", "").replace("</answer>", "").strip()
-    
-    state.response = response
     return state
 
 def update_history(state: AgentState) -> AgentState:
@@ -290,8 +394,10 @@ builder = StateGraph(AgentState)
 # Add nodes
 builder.add_node("detect_customer", detect_customer_name)
 builder.add_node("customer_prompt", generate_customer_prompt)
+builder.add_node("determine_search", determine_search_type)
+builder.add_node("web_search", perform_web_search)
 builder.add_node("condense", condense_question)
-builder.add_node("reason", reason_about_query)  # Add the reasoning node
+builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
@@ -299,26 +405,41 @@ builder.add_node("update_history", update_history)
 
 # Add edges
 builder.add_edge(START, "detect_customer")
+
+# From customer detection
 builder.add_conditional_edges(
     "detect_customer",
-    lambda x: "customer_prompt" if x.needs_customer_prompt else "condense",
+    lambda x: "customer_prompt" if x.needs_customer_prompt else "determine_search",
     {
         "customer_prompt": "customer_prompt",
+        "determine_search": "determine_search"
+    }
+)
+
+# From customer prompt
+builder.add_conditional_edges(
+    "customer_prompt",
+    lambda x: END if x.awaiting_customer_response else "determine_search",
+    {
+        END: END,
+        "determine_search": "determine_search"
+    }
+)
+
+# From search type determination
+builder.add_conditional_edges(
+    "determine_search",
+    lambda x: "web_search" if x.use_web_search else "condense",
+    {
+        "web_search": "web_search",
         "condense": "condense"
     }
 )
 
-# Add edge from customer prompt to end (when we need to wait for user response)
-builder.add_conditional_edges(
-    "customer_prompt",
-    lambda x: END if x.awaiting_customer_response else "condense",
-    {
-        END: END,
-        "condense": "condense"
-    }
-)
-builder.add_edge("condense", "reason")  # Connect condense to reason
-builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
+# Rest of the flow
+builder.add_edge("web_search", "generate")
+builder.add_edge("condense", "reason")
+builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")

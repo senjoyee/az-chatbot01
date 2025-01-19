@@ -24,3 +24,6 @@ BLOB_CONTAINER = os.getenv("BLOB_CONTAINER")
 
 # Construct Azure Search endpoint (exactly as in original implementation)
 AZURE_SEARCH_SERVICE_ENDPOINT = f"https://{AZURE_SEARCH_SERVICE}.search.windows.net"
+
+# Web Search API key
+SERPER_API_KEY = os.getenv("SERPER_API_KEY")

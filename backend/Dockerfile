@@ -1,5 +1,5 @@
 # Stage 1: Builder
-FROM python:3.11-slim-bookworm as builder
+FROM debian:bookworm-slim as builder
 
 # Set build-time environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -10,20 +10,26 @@ ENV PYTHONUNBUFFERED=1 \
 # Set the working directory for dependencies
 WORKDIR /build
 
+# Install Python and build dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
+    python3.11-dev \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
 # Create and activate virtual environment
-RUN python -m venv /opt/venv
+RUN python3.11 -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
 # Install build dependencies and Python packages
 COPY requirements.txt .
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && pip install --no-cache-dir -r requirements.txt \
-    && rm -rf /var/lib/apt/lists/* \
-    && apt-get clean
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Stage 2: Runtime
-FROM python:3.11-slim-bookworm
+FROM debian:bookworm-slim
 
 # Set runtime environment variables
 ENV PYTHONUNBUFFERED=1 \
@@ -36,7 +42,10 @@ ENV PYTHONUNBUFFERED=1 \
 WORKDIR /app
 
 # Install runtime system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    python3.11 \
+    python3.11-venv \
     libmagic1 \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -58,7 +67,6 @@ COPY --from=builder /opt/venv /opt/venv
 RUN adduser --disabled-password --gecos "" appuser
 
 # Copy the application code
-# This layer changes frequently, so we put it last
 COPY . .
 
 # Change ownership of the application files

@@ -48,3 +48,5 @@ class AgentState(BaseModel):
     customer_name: Optional[str] = None
     needs_customer_prompt: bool = False
     awaiting_customer_response: bool = False
+    use_web_search: bool = False  # Whether to use web search
+    web_results: Optional[str] = None  # Store web search results
