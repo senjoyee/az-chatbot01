@@ -1,4 +1,4 @@
-name: Build and deploy Python app to Azure Web App - jscbbackend01
+name: Deploy to Azure Web Apps
 
 on:
   push:
@@ -7,9 +7,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  deploy-backend:
     runs-on: ubuntu-latest
-
+    
     steps:
       - uses: actions/checkout@v4
 
@@ -22,6 +22,16 @@ jobs:
         run: |
           python -m venv venv
           source venv/bin/activate
+
+      # Add startup script for system dependencies
+      - name: Create startup script
+        working-directory: ./backend
+        run: |
+          echo "#!/bin/bash" > startup.sh
+          echo "apt-get update" >> startup.sh
+          echo "apt-get install -y libgl1-mesa-glx libglib2.0-0" >> startup.sh
+          echo "python -m uvicorn app:app --host 0.0.0.0 --port 8000" >> startup.sh
+          chmod +x startup.sh
       
       - name: Install dependencies
         working-directory: ./backend
@@ -45,15 +55,7 @@ jobs:
             backend/release.zip
             !venv/
 
-  deploy:
-    runs-on: ubuntu-latest
-    needs: build
-    environment:
-      name: 'production'
-      url: ${{ steps.deploy-to-webapp.outputs.webapp-url }}
-    
-    steps:
-      - name: Download artifact from build job
+      - name: Download artifact for deployment
         uses: actions/download-artifact@v4
         with:
           name: python-app
