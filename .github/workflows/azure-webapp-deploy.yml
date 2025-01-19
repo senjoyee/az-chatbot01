@@ -71,11 +71,15 @@ jobs:
 
     - name: Build frontend
       working-directory: ./frontend
-      run: npm run build
+      run: |
+        npm run build
+        cp web.config .next/web.config
+        cp server.js .next/server.js
+        cp package.json .next/package.json
 
     - name: Deploy Frontend to Azure Web App
       uses: azure/webapps-deploy@v2
       with:
         app-name: ${{ secrets.AZURE_FRONTEND_APP_NAME }}
         publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
-        package: ./frontend
+        package: ./frontend/.next
