@@ -28,14 +28,12 @@ jobs:
         working-directory: ./backend
         run: |
           echo "# startup.txt" > startup.txt
-          echo "gunicorn --bind=0.0.0.0 --timeout 600 app:app" >> startup.txt
+          echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0 && gunicorn --bind=0.0.0.0 --timeout 600 app:app" >> startup.txt
 
       - name: Create runtime script
         working-directory: ./backend
         run: |
           echo "# requirements.txt" > requirements.txt.new
-          echo "libgl1-mesa-glx" >> requirements.txt.new
-          echo "libglib2.0-0" >> requirements.txt.new
           cat requirements.txt >> requirements.txt.new
           mv requirements.txt.new requirements.txt
 
