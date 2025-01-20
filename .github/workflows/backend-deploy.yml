@@ -38,13 +38,9 @@ jobs:
       with:
         context: ${{ env.WORKING_DIRECTORY }}
         push: true
-        tags: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-        build-args: |
-          BUILDKIT_INLINE_CACHE=1
-        cache-from: |
-          type=registry,ref=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
-        cache-to: |
-          type=inline
+        tags: |
+          ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
 
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
