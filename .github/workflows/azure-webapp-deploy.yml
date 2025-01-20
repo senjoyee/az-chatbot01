@@ -61,7 +61,8 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
           echo "# startup.txt" > startup.txt
-          echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0 && gunicorn --bind=0.0.0.0 --timeout 600 app:app" >> startup.txt
+          echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0" > startup.txt
+          echo "cd /home/site/wwwroot && gunicorn --bind=0.0.0.0 --timeout 600 --chdir /home/site/wwwroot app:app" >> startup.txt
         
       - name: List backend directory contents
         run: |
@@ -104,10 +105,10 @@ jobs:
       # Clean up before deployment to free space
       - name: Clean up before deployment
         run: |
-          rm -rf ${{ env.WORKING_DIRECTORY }}/.venv
-          rm -rf ${{ env.WORKING_DIRECTORY }}/__pycache__
-          find ${{ env.WORKING_DIRECTORY }} -type d -name "__pycache__" -exec rm -r {} +
-          find ${{ env.WORKING_DIRECTORY }} -type f -name "*.pyc" -delete
+          [ -d "${{ env.WORKING_DIRECTORY }}/.venv" ] && rm -rf ${{ env.WORKING_DIRECTORY }}/.venv
+          [ -d "${{ env.WORKING_DIRECTORY }}/__pycache__" ] && rm -rf ${{ env.WORKING_DIRECTORY }}/__pycache__
+          find ${{ env.WORKING_DIRECTORY }} -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
+          find ${{ env.WORKING_DIRECTORY }} -type f -name "*.pyc" -delete 2>/dev/null || true
 
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
@@ -123,5 +124,5 @@ jobs:
       - name: Clean up after deployment
         if: always()
         run: |
-          rm -f ${{ env.WORKING_DIRECTORY }}/release.zip
-          rm -rf ~/.cache/pip
+          [ -f "${{ env.WORKING_DIRECTORY }}/release.zip" ] && rm -f ${{ env.WORKING_DIRECTORY }}/release.zip
+          [ -d "~/.cache/pip" ] && rm -rf ~/.cache/pip || true
