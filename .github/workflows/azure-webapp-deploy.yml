@@ -60,52 +60,39 @@ jobs:
     - name: Create startup script
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: |
+        # Create the main startup script
         echo "#!/bin/bash" > startup.sh
-        # Update package list and install dependencies with error checking
-        echo "set -e && \\" >> startup.sh
-        echo "apt-get update && \\" >> startup.sh
+        echo "set -e" >> startup.sh
+        echo "" >> startup.sh
+        # Update package list and install dependencies
+        echo "# Install system dependencies" >> startup.sh
+        echo "apt-get update" >> startup.sh
         echo "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\" >> startup.sh
-        echo "  libmagic1 \\" >> startup.sh
-        echo "  libgl1-mesa-glx \\" >> startup.sh
-        echo "  libglib2.0-0 \\" >> startup.sh
-        echo "  libsm6 \\" >> startup.sh
-        echo "  libxext6 \\" >> startup.sh
-        echo "  libxrender1 \\" >> startup.sh
-        echo "  libgomp1 \\" >> startup.sh
-        echo "  libglu1-mesa \\" >> startup.sh
-        echo "  libxi6 \\" >> startup.sh
-        echo "  libxmu6 \\" >> startup.sh
-        echo "  x11-common \\" >> startup.sh
-        echo "  poppler-utils \\" >> startup.sh
-        echo "  tesseract-ocr && \\" >> startup.sh
-        # Update pip and install headless opencv
-        echo "python -m pip install --upgrade pip && \\" >> startup.sh
-        echo "pip uninstall -y opencv-python opencv-python-headless && \\" >> startup.sh
-        echo "pip install opencv-python-headless==4.5.1.48 && \\" >> startup.sh
-        # Create symbolic links and set permissions
-        echo "mkdir -p /usr/lib/x86_64-linux-gnu/mesa && \\" >> startup.sh
-        echo "ln -sf /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/libGL.so.1 && \\" >> startup.sh
-        echo "ln -sf /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/mesa/libGL.so.1 && \\" >> startup.sh
-        echo "chmod 755 /usr/lib/x86_64-linux-gnu/libGL.so.1 && \\" >> startup.sh
-        # Update library cache
-        echo "ldconfig && \\" >> startup.sh
-        # Set environment variables
-        echo "export PYTHONUNBUFFERED=1 && \\" >> startup.sh
-        echo "export PYTHONDONTWRITEBYTECODE=1 && \\" >> startup.sh
-        echo "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu/mesa:\$LD_LIBRARY_PATH && \\" >> startup.sh
-        echo "export PYTHONPATH=/home/site/wwwroot/antenv/lib/python3.11/site-packages:/home/site/wwwroot:\$PYTHONPATH && \\" >> startup.sh
-        # Debug information
-        echo "echo 'OpenGL packages installed:' && \\" >> startup.sh
-        echo "dpkg -l | grep -i gl && \\" >> startup.sh
-        echo "echo 'Checking OpenGL installation:' && \\" >> startup.sh
-        echo "ls -l /usr/lib/x86_64-linux-gnu/libGL* && \\" >> startup.sh
-        echo "ls -l /usr/lib/libGL* && \\" >> startup.sh
-        echo "echo 'Library dependencies:' && \\" >> startup.sh
-        echo "ldd /usr/lib/x86_64-linux-gnu/libGL.so.1 && \\" >> startup.sh
-        # Start the application
-        echo "cd /home/site/wwwroot && \\" >> startup.sh
-        echo "gunicorn --bind=0.0.0.0 --timeout 600 --chdir /home/site/wwwroot app:app" >> startup.sh
+        echo "  libmagic1 libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 \\" >> startup.sh
+        echo "  libxrender1 libgomp1 libglu1-mesa libxi6 libxmu6 \\" >> startup.sh
+        echo "  x11-common poppler-utils tesseract-ocr" >> startup.sh
+        echo "" >> startup.sh
+        # Python environment setup
+        echo "# Setup Python environment" >> startup.sh
+        echo "export PYTHONPATH=/home/site/wwwroot:/home/site/wwwroot/antenv/lib/python3.11/site-packages:\$PYTHONPATH" >> startup.sh
+        echo "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/lib:\$LD_LIBRARY_PATH" >> startup.sh
+        echo "" >> startup.sh
+        # OpenCV setup
+        echo "# Setup OpenCV dependencies" >> startup.sh
+        echo "pip install --upgrade pip" >> startup.sh
+        echo "pip install opencv-python-headless==4.5.1.48" >> startup.sh
+        echo "" >> startup.sh
+        # Start application
+        echo "# Start the application" >> startup.sh
+        echo "cd /home/site/wwwroot" >> startup.sh
+        echo "gunicorn --bind=0.0.0.0:5000 --timeout 600 app:app" >> startup.sh
+        
+        # Make the script executable
         chmod +x startup.sh
+        
+        # Create a .deployment file to tell Azure where to find the startup script
+        echo "[config]" > .deployment
+        echo "STARTUP_FILE=startup.sh" >> .deployment
 
     - name: List backend directory contents
       run: |
@@ -126,8 +113,11 @@ jobs:
       if: steps.artifact-cache.outputs.cache-hit != 'true'
       working-directory: ${{ env.WORKING_DIRECTORY }}
       run: |
-        # Create a minimal deployment package
-        zip release.zip ./* -r \
+        # Ensure startup script and .deployment have correct permissions
+        chmod +x startup.sh
+        
+        # Create deployment package
+        zip release.zip ./* .deployment -r \
           -x "*.pyc" \
           -x "__pycache__/*" \
           -x "*.git*" \
@@ -136,6 +126,10 @@ jobs:
           -x "*.log" \
           -x "*.tmp" \
           -x "*.bak"
+        
+        # Verify critical files are in the zip
+        echo "Verifying deployment package contents:"
+        unzip -l release.zip | grep -E "startup.sh|.deployment" || echo "WARNING: Critical files missing from zip"
 
     - name: Upload artifact for deployment jobs
       uses: actions/upload-artifact@v4
@@ -162,17 +156,6 @@ jobs:
         publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
         package: ${{ env.WORKING_DIRECTORY }}/release.zip
         clean: true
-
-    # Azure CLI Login (if using Azure CLI to set Startup Command)
-    - name: Azure CLI Login
-      uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}  # Ensure you have set this secret
-
-    # Set Startup Command via Azure CLI
-    - name: Set Startup Command
-      run: |
-        az webapp config set --resource-group <YourResourceGroup> --name jscbbackend01 --startup-file "./startup.sh"
 
     # Clean up after deployment
     - name: Clean up after deployment
