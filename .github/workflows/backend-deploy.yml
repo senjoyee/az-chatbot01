@@ -12,7 +12,7 @@ on:
 env:
   PYTHON_VERSION: '3.11'
   WORKING_DIRECTORY: ./backend
-  AZURE_CONTAINER_REGISTRY: jssapmscr  # Updated to your existing ACR
+  AZURE_CONTAINER_REGISTRY: jssapmscr
   IMAGE_NAME: backend
   IMAGE_TAG: ${{ github.sha }}
 
@@ -39,8 +39,12 @@ jobs:
         context: ${{ env.WORKING_DIRECTORY }}
         push: true
         tags: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-        cache-from: type=gha
-        cache-to: type=gha,mode=max
+        build-args: |
+          BUILDKIT_INLINE_CACHE=1
+        cache-from: |
+          type=registry,ref=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+        cache-to: |
+          type=inline
 
     - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
