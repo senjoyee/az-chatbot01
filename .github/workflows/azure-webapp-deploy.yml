@@ -61,7 +61,8 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
           echo "# startup.txt" > startup.txt
-          echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0" > startup.txt
+          echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0" >> startup.txt
+          echo "export PYTHONPATH=/home/site/wwwroot/antenv/lib/python3.11/site-packages:/home/site/wwwroot:$PYTHONPATH" >> startup.txt
           echo "cd /home/site/wwwroot && gunicorn --bind=0.0.0.0 --timeout 600 --chdir /home/site/wwwroot app:app" >> startup.txt
         
       - name: List backend directory contents
