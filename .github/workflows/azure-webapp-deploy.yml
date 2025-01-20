@@ -67,6 +67,8 @@ jobs:
           echo "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\" >> startup.txt
           echo "  libmagic1 \\" >> startup.txt
           echo "  libgl1-mesa-glx \\" >> startup.txt
+          echo "  libgl1 \\" >> startup.txt
+          echo "  mesa-utils \\" >> startup.txt
           echo "  libglib2.0-0 \\" >> startup.txt
           echo "  libsm6 \\" >> startup.txt
           echo "  libxext6 \\" >> startup.txt
@@ -74,18 +76,27 @@ jobs:
           echo "  libgomp1 \\" >> startup.txt
           echo "  poppler-utils \\" >> startup.txt
           echo "  tesseract-ocr && \\" >> startup.txt
-          # Verify OpenGL installation
+          # Create symbolic links for OpenGL libraries
+          echo "mkdir -p /usr/lib/x86_64-linux-gnu/mesa && \\" >> startup.txt
+          echo "ln -sf /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/libGL.so.1 && \\" >> startup.txt
+          echo "ln -sf /usr/lib/x86_64-linux-gnu/libGL.so.1 /usr/lib/x86_64-linux-gnu/mesa/libGL.so.1 && \\" >> startup.txt
+          # Update library cache
           echo "ldconfig && \\" >> startup.txt
           # Set environment variables
           echo "export PYTHONUNBUFFERED=1 && \\" >> startup.txt
           echo "export PYTHONDONTWRITEBYTECODE=1 && \\" >> startup.txt
-          echo "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH && \\" >> startup.txt
+          echo "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/lib:/usr/lib/x86_64-linux-gnu/mesa:$LD_LIBRARY_PATH && \\" >> startup.txt
           echo "export PYTHONPATH=/home/site/wwwroot/antenv/lib/python3.11/site-packages:/home/site/wwwroot:$PYTHONPATH && \\" >> startup.txt
           # Debug information
+          echo "echo 'OpenGL packages installed:' && \\" >> startup.txt
+          echo "dpkg -l | grep -i gl && \\" >> startup.txt
           echo "echo 'Checking OpenGL installation:' && \\" >> startup.txt
           echo "ls -l /usr/lib/x86_64-linux-gnu/libGL* && \\" >> startup.txt
+          echo "ls -l /usr/lib/libGL* && \\" >> startup.txt
           echo "echo 'Library dependencies:' && \\" >> startup.txt
           echo "ldd /usr/lib/x86_64-linux-gnu/libGL.so.1 && \\" >> startup.txt
+          echo "echo 'OpenGL vendor string:' && \\" >> startup.txt
+          echo "glxinfo | grep vendor && \\" >> startup.txt
           # Start the application
           echo "cd /home/site/wwwroot && \\" >> startup.txt
           echo "gunicorn --bind=0.0.0.0 --timeout 600 --chdir /home/site/wwwroot app:app" >> startup.txt
