@@ -19,7 +19,6 @@ COPY requirements.txt .
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir opencv-python-headless==4.5.1.48 \
     && rm -rf /var/lib/apt/lists/* \
     && apt-get clean
 
