@@ -1,14 +1,44 @@
-# Use Python 3.11 slim as base image
-FROM python:3.11-slim
+# Stage 1: Builder
+FROM python:3.11-slim-bookworm as builder
 
-# Set environment variables
+# Set build-time environment variables
 ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
-    PORT=5000
+    PIP_NO_CACHE_DIR=1
 
-# Install system dependencies
-# Group all apt commands in a single layer
-RUN apt-get update && apt-get install -y \
+# Set the working directory for dependencies
+WORKDIR /build
+
+# Create and activate virtual environment
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install build dependencies and Python packages
+COPY requirements.txt .
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && pip install --no-cache-dir -r requirements.txt \
+    && pip install --no-cache-dir opencv-python-headless==4.5.1.48 \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Stage 2: Runtime
+FROM python:3.11-slim-bookworm
+
+# Set runtime environment variables
+ENV PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PORT=5000 \
+    PATH="/opt/venv/bin:$PATH"
+
+# Set the working directory
+WORKDIR /app
+
+# Install runtime system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libmagic1 \
     libgl1-mesa-glx \
     libglib2.0-0 \
     libsm6 \
@@ -21,26 +51,27 @@ RUN apt-get update && apt-get install -y \
     x11-common \
     poppler-utils \
     tesseract-ocr \
-    libmagic1 \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean \
+    && ldconfig
 
-# Set working directory
-WORKDIR /app
+# Copy virtual environment from builder
+COPY --from=builder /opt/venv /opt/venv
 
-# Copy only requirements first
-# This layer will be cached unless requirements.txt changes
-COPY requirements.txt .
+# Create non-root user for security
+RUN adduser --disabled-password --gecos "" appuser
 
-# Install Python packages in a single layer
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir opencv-python-headless==4.5.1.48
-
-# Copy only necessary application files
-# Use .dockerignore to exclude unnecessary files
+# Copy the application code
 COPY . .
 
-# Expose port
-EXPOSE 5000
+# Change ownership of the application files
+RUN chown -R appuser:appuser /app
 
-# Command to run the application
+# Switch to non-root user
+USER appuser
+
+# Make port 5000 available
+EXPOSE $PORT
+
+# Run the application
 CMD ["gunicorn", "--bind", "0.0.0.0:5000", "--timeout", "600", "app:app"]
