@@ -82,7 +82,16 @@ jobs:
         if: steps.artifact-cache.outputs.cache-hit != 'true'
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
-          zip release.zip ./* -r -x ".venv/*"
+          # Create a minimal deployment package
+          zip release.zip ./* -r \
+            -x "*.pyc" \
+            -x "__pycache__/*" \
+            -x "*.git*" \
+            -x ".venv/*" \
+            -x "tests/*" \
+            -x "*.log" \
+            -x "*.tmp" \
+            -x "*.bak"
 
       - name: Upload artifact for deployment jobs
         uses: actions/upload-artifact@v4
@@ -92,16 +101,14 @@ jobs:
           compression-level: 9
           retention-days: 1
 
-      - name: Download artifact for deployment
-        uses: actions/download-artifact@v4
-        with:
-          name: python-app
-          path: ${{ env.WORKING_DIRECTORY }}
+      # Clean up before deployment to free space
+      - name: Clean up before deployment
+        run: |
+          rm -rf ${{ env.WORKING_DIRECTORY }}/.venv
+          rm -rf ${{ env.WORKING_DIRECTORY }}/__pycache__
+          find ${{ env.WORKING_DIRECTORY }} -type d -name "__pycache__" -exec rm -r {} +
+          find ${{ env.WORKING_DIRECTORY }} -type f -name "*.pyc" -delete
 
-      - name: Unzip artifact for deployment
-        working-directory: ${{ env.WORKING_DIRECTORY }}
-        run: unzip -o release.zip
-      
       - name: 'Deploy to Azure Web App'
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
@@ -109,4 +116,12 @@ jobs:
           app-name: 'jscbbackend01'
           slot-name: 'production'
           publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+          package: ${{ env.WORKING_DIRECTORY }}/release.zip
           clean: true
+
+      # Clean up after deployment
+      - name: Clean up after deployment
+        if: always()
+        run: |
+          rm -f ${{ env.WORKING_DIRECTORY }}/release.zip
+          rm -rf ~/.cache/pip
