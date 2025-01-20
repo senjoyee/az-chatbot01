@@ -61,9 +61,30 @@ jobs:
         working-directory: ${{ env.WORKING_DIRECTORY }}
         run: |
           echo "# startup.txt" > startup.txt
-          echo "apt-get update && apt-get install -y libgl1-mesa-glx libglib2.0-0" >> startup.txt
-          echo "export PYTHONPATH=/home/site/wwwroot/antenv/lib/python3.11/site-packages:/home/site/wwwroot:$PYTHONPATH" >> startup.txt
-          echo "cd /home/site/wwwroot && gunicorn --bind=0.0.0.0 --timeout 600 --chdir /home/site/wwwroot app:app" >> startup.txt
+          # Update package list and install dependencies with error checking
+          echo "set -e && \\" >> startup.txt
+          echo "apt-get update && \\" >> startup.txt
+          echo "DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \\" >> startup.txt
+          echo "  libgl1 \\" >> startup.txt
+          echo "  libgl1-mesa-glx \\" >> startup.txt
+          echo "  libglib2.0-0 \\" >> startup.txt
+          echo "  libsm6 \\" >> startup.txt
+          echo "  libxext6 \\" >> startup.txt
+          echo "  libxrender1 \\" >> startup.txt
+          echo "  mesa-utils && \\" >> startup.txt
+          # Verify OpenGL installation
+          echo "ldconfig && \\" >> startup.txt
+          # Set library path and Python path
+          echo "export LD_LIBRARY_PATH=/usr/lib/x86_64-linux-gnu:/usr/lib:/usr/local/lib:$LD_LIBRARY_PATH && \\" >> startup.txt
+          echo "export PYTHONPATH=/home/site/wwwroot/antenv/lib/python3.11/site-packages:/home/site/wwwroot:$PYTHONPATH && \\" >> startup.txt
+          # Debug information
+          echo "echo 'Checking OpenGL installation:' && \\" >> startup.txt
+          echo "ls -l /usr/lib/x86_64-linux-gnu/libGL* && \\" >> startup.txt
+          echo "echo 'Library dependencies:' && \\" >> startup.txt
+          echo "ldd /usr/lib/x86_64-linux-gnu/libGL.so.1 && \\" >> startup.txt
+          # Start the application
+          echo "cd /home/site/wwwroot && \\" >> startup.txt
+          echo "gunicorn --bind=0.0.0.0 --timeout 600 --chdir /home/site/wwwroot app:app" >> startup.txt
         
       - name: List backend directory contents
         run: |
