@@ -14,7 +14,7 @@ env:
   WORKING_DIRECTORY: ./backend
   AZURE_CONTAINER_REGISTRY: jssapmscr
   IMAGE_NAME: backend
-  IMAGE_TAG: ${{ github.sha }}
+  IMAGE_TAG: latest
 
 jobs:
   build-and-deploy:
