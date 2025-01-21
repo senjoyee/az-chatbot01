@@ -1,4 +1,4 @@
-name: Deploy Backend to Azure Web App
+name: Build and Push Backend Image
 
 on:
   push:
@@ -17,7 +17,7 @@ env:
   IMAGE_TAG: latest
 
 jobs:
-  build-and-deploy:
+  build-and-push:
     runs-on: ubuntu-latest
     
     steps:
@@ -39,13 +39,3 @@ jobs:
         context: ${{ env.WORKING_DIRECTORY }}
         push: true
         tags: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-
-    - name: Deploy to Azure Web App
-      uses: azure/webapps-deploy@v3
-      with:
-        app-name: 'jscbbackend01'
-        slot-name: 'production'
-        publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
-        images: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
-        startup-command: 'uvicorn app:app --host 0.0.0.0 --port 5000'
-        runtime-stack: 'DOCKER|linux'
