@@ -58,7 +58,9 @@ llm_4o = AzureChatOpenAI(
 # Prompt templates
 
 # Add new prompt for search type determination
-determine_search_type_template = """Analyze the following question and determine if it requires internal document search or web search.
+determine_search_type_template = """Analyze the following question to determine:
+1. If it requires internal document search or web search
+2. If it needs customer-specific information
 
 Question: {question}
 
@@ -72,11 +74,16 @@ Consider these guidelines:
    - Industry trends or news
    - Technical information not specific to customers
    - Public information or current events
+3. Customer information is needed when:
+   - Question is about specific customer details, contracts, or interactions
+   - Query requires access to customer-specific documents
+   - Question involves customer-specific business processes
 
 Respond in JSON format:
 {
     "use_web_search": boolean,
-    "reasoning": "brief explanation"
+    "needs_customer_info": boolean,
+    "reasoning": "brief explanation for both decisions"
 }
 """
 
@@ -273,24 +280,29 @@ def rerank_documents(state: AgentState) -> AgentState:
     return state
 
 def determine_search_type(state: AgentState) -> AgentState:
-    """Determine if the question needs web search or internal search."""
+    """Determine if the question needs web search or internal search, and if customer info is needed."""
     chain = DETERMINE_SEARCH_TYPE_PROMPT | llm_4o | StrOutputParser() | json.loads
     
     try:
         result = chain.invoke({"question": state.question})
-        if not isinstance(result, dict) or "use_web_search" not in result:
+        if not isinstance(result, dict) or "use_web_search" not in result or "needs_customer_info" not in result:
             logger.error("Invalid response format from search type determination")
             state.use_web_search = False
+            state.needs_customer_prompt = False
             return state
             
         state.use_web_search = result["use_web_search"]
+        state.needs_customer_prompt = result["needs_customer_info"] and not state.customer_name
         logger.info(f"Search type determination: {result.get('reasoning', 'No reasoning provided')}")
+        
     except json.JSONDecodeError:
         logger.error("Failed to parse search type determination response")
         state.use_web_search = False
+        state.needs_customer_prompt = False
     except Exception as e:
         logger.error(f"Error determining search type: {str(e)}")
         state.use_web_search = False
+        state.needs_customer_prompt = False
     
     return state
 
@@ -392,9 +404,8 @@ def update_history(state: AgentState) -> AgentState:
 builder = StateGraph(AgentState)
 
 # Add nodes
-builder.add_node("detect_customer", detect_customer_name)
-builder.add_node("customer_prompt", generate_customer_prompt)
 builder.add_node("determine_search", determine_search_type)
+builder.add_node("customer_prompt", generate_customer_prompt)
 builder.add_node("web_search", perform_web_search)
 builder.add_node("condense", condense_question)
 builder.add_node("reason", reason_about_query)
@@ -404,33 +415,29 @@ builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-builder.add_edge(START, "detect_customer")
+builder.add_edge(START, "determine_search")
 
-# From customer detection
+# From search type determination
 builder.add_conditional_edges(
-    "detect_customer",
-    lambda x: "customer_prompt" if x.needs_customer_prompt else "determine_search",
+    "determine_search",
+    lambda x: (
+        "customer_prompt" if x.needs_customer_prompt
+        else "web_search" if x.use_web_search
+        else "condense"
+    ),
     {
         "customer_prompt": "customer_prompt",
-        "determine_search": "determine_search"
+        "web_search": "web_search",
+        "condense": "condense"
     }
 )
 
 # From customer prompt
 builder.add_conditional_edges(
     "customer_prompt",
-    lambda x: END if x.awaiting_customer_response else "determine_search",
+    lambda x: END if x.awaiting_customer_response else "web_search" if x.use_web_search else "condense",
     {
         END: END,
-        "determine_search": "determine_search"
-    }
-)
-
-# From search type determination
-builder.add_conditional_edges(
-    "determine_search",
-    lambda x: "web_search" if x.use_web_search else "condense",
-    {
         "web_search": "web_search",
         "condense": "condense"
     }
