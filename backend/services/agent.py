@@ -404,10 +404,11 @@ def update_history(state: AgentState) -> AgentState:
 builder = StateGraph(AgentState)
 
 # Add nodes
+builder.add_node("condense", condense_question)
+builder.add_node("detect_customer", detect_customer_name)
 builder.add_node("determine_search", determine_search_type)
 builder.add_node("customer_prompt", generate_customer_prompt)
 builder.add_node("web_search", perform_web_search)
-builder.add_node("condense", condense_question)
 builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
@@ -415,37 +416,47 @@ builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-builder.add_edge(START, "determine_search")
+# Start the flow - go to condense if there's chat history
+builder.add_conditional_edges(
+    START,
+    lambda x: "condense" if x.chat_history else "detect_customer",
+    {
+        "condense": "condense",
+        "detect_customer": "detect_customer"
+    }
+)
+
+# From condense to detect_customer
+builder.add_edge("condense", "detect_customer")
+
+# From detect_customer to determine_search
+builder.add_edge("detect_customer", "determine_search")
 
 # From search type determination
 builder.add_conditional_edges(
     "determine_search",
-    lambda x: (
-        "customer_prompt" if x.needs_customer_prompt
-        else "web_search" if x.use_web_search
-        else "condense"
+    lambda x: "customer_prompt" if (not x.customer_name and x.needs_customer_prompt) else (
+        "web_search" if x.use_web_search else "reason"
     ),
     {
         "customer_prompt": "customer_prompt",
         "web_search": "web_search",
-        "condense": "condense"
+        "reason": "reason"
     }
 )
 
 # From customer prompt
 builder.add_conditional_edges(
     "customer_prompt",
-    lambda x: END if x.awaiting_customer_response else "web_search" if x.use_web_search else "condense",
+    lambda x: END if x.awaiting_customer_response else "determine_search",
     {
         END: END,
-        "web_search": "web_search",
-        "condense": "condense"
+        "determine_search": "determine_search"
     }
 )
 
 # Rest of the flow
 builder.add_edge("web_search", "generate")
-builder.add_edge("condense", "reason")
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
