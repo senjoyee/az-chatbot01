@@ -274,7 +274,7 @@ def rerank_documents(state: AgentState) -> AgentState:
 
 def determine_search_type(state: AgentState) -> AgentState:
     """Determine if the question needs web search or internal search."""
-    chain = DETERMINE_SEARCH_TYPE_PROMPT | llm_4o_mini | StrOutputParser() | json.loads
+    chain = DETERMINE_SEARCH_TYPE_PROMPT | llm_4o | StrOutputParser() | json.loads
     
     try:
         result = chain.invoke({"question": state.question})
