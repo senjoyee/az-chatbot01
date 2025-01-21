@@ -31,7 +31,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=5000 \
     PATH="/opt/venv/bin:$PATH" \
-    PYTHONPATH="/app"
+    PYTHONPATH="/app" \
+    WEBSITE_HOSTNAME=jscbbackend01.azurewebsites.net \
+    WEBSITES_PORT=5000
 
 # Set the working directory
 WORKDIR /app
@@ -71,7 +73,7 @@ RUN chown -R appuser:appuser /app
 USER appuser
 
 # Make port 5000 available
-EXPOSE $PORT
+EXPOSE 5000
 
 # Run the application
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "5000"]
