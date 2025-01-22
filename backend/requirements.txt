@@ -19,4 +19,3 @@ azure-data-tables
 transformers
 torch
 sentence-transformers
-
