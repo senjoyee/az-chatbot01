@@ -288,37 +288,51 @@ def update_history(state: AgentState) -> AgentState:
 builder = StateGraph(AgentState)
 
 # Add nodes
+builder.add_node("condense", condense_question)
 builder.add_node("detect_customer", detect_customer_name)
 builder.add_node("customer_prompt", generate_customer_prompt)
-builder.add_node("condense", condense_question)
-builder.add_node("reason", reason_about_query)  # Add the reasoning node
+builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-builder.add_edge(START, "detect_customer")
+# Start with condense if there's chat history
 builder.add_conditional_edges(
-    "detect_customer",
-    lambda x: "customer_prompt" if x.needs_customer_prompt else "condense",
+    START,
+    lambda x: "condense" if x.chat_history else "detect_customer",
     {
-        "customer_prompt": "customer_prompt",
-        "condense": "condense"
+        "condense": "condense",
+        "detect_customer": "detect_customer"
     }
 )
 
-# Add edge from customer prompt to end (when we need to wait for user response)
+# From condense to detect_customer
+builder.add_edge("condense", "detect_customer")
+
+# From detect_customer to customer_prompt or reason
 builder.add_conditional_edges(
-    "customer_prompt",
-    lambda x: END if x.awaiting_customer_response else "condense",
+    "detect_customer",
+    lambda x: "customer_prompt" if x.needs_customer_prompt else "reason",
     {
-        END: END,
-        "condense": "condense"
+        "customer_prompt": "customer_prompt",
+        "reason": "reason"
     }
 )
-builder.add_edge("condense", "reason")  # Connect condense to reason
-builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
+
+# From customer_prompt
+builder.add_conditional_edges(
+    "customer_prompt",
+    lambda x: END if x.awaiting_customer_response else "reason",
+    {
+        END: END,
+        "reason": "reason"
+    }
+)
+
+# Rest of the flow
+builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
