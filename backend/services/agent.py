@@ -240,15 +240,37 @@ def reason_about_query(state: AgentState) -> AgentState:
     return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
+    """Retrieve documents and determine if relevant documents were found."""
     logger.info(f"Retrieving documents for question: {state.question}")
-    state.documents = vector_store.hybrid_search(
+    
+    # Perform hybrid search
+    results = vector_store.hybrid_search(
         state.question,
         k=10,
     )
+    
+    # Check if we found any documents
+    if not results:
+        logger.info("No documents found in vector store")
+        state.documents_found = False
+        state.documents = []
+        return state
+    
+    # Store documents for potential use
+    state.documents = results
+    
+    # Initial relevance check will be refined by reranker
+    state.documents_found = True
+    logger.info(f"Retrieved {len(results)} documents")
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
+    """Rerank documents and update documents_found based on relevance scores."""
     logger.info("Reranking documents")
+    
+    if not state.documents:
+        state.documents_found = False
+        return state
     
     query = state.question
     documents = state.documents
@@ -274,6 +296,14 @@ def rerank_documents(state: AgentState) -> AgentState:
     # Sort documents by score
     scored_docs = list(zip(documents, scores))
     scored_docs.sort(key=lambda x: x[1], reverse=True)
+    
+    # Check if the highest scoring document meets our threshold
+    if scored_docs and scored_docs[0][1] >= state.min_relevance_score:
+        state.documents_found = True
+        logger.info(f"Found relevant documents with top score: {scored_docs[0][1]}")
+    else:
+        state.documents_found = False
+        logger.info(f"No documents met relevance threshold. Top score: {scored_docs[0][1] if scored_docs else 'N/A'}")
     
     # Update state with reranked documents
     state.documents = [doc for doc, _ in scored_docs]
@@ -345,31 +375,29 @@ def perform_web_search(state: AgentState) -> AgentState:
 
 
 def generate_response(state: AgentState) -> AgentState:
-    """Generate response using either web search results or internal documents."""
+    """Generate response using either retrieved documents or web search results."""
     logger.info("Generating response")
     
-    # Prepare context based on search type
-    if state.use_web_search:
-        if not state.web_results:
-            state.response = "I apologize, but I couldn't retrieve any information from the web search. Please try rephrasing your question or asking something else."
-            return state
-        context = f"Web Search Results:\n{state.web_results}"
-    else:
-        if not state.documents:
-            state.response = "I couldn't find any relevant information in our internal documents to answer your question."
-            return state
+    # Determine the context source
+    if state.documents_found and state.documents:
         # Use top K documents for internal search
         TOP_K_DOCUMENTS = 3
         top_documents = state.documents[:TOP_K_DOCUMENTS]
         context = "\n\n".join(doc.page_content for doc in top_documents)
         logger.info(f"Using {len(top_documents)} internal documents")
+    elif state.web_results:
+        context = f"Web Search Results:\n{state.web_results}"
+        logger.info("Using web search results")
+    else:
+        state.response = "I apologize, but I couldn't find any relevant information to answer your question."
+        return state
     
     try:
         # Generate response using the appropriate context
         _input = (
             RunnableLambda(lambda x: {
                 "context": context,
-                "question": x.question
+                "question": x.original_question or x.question  # Use original question if available
             })
             | ANSWER_PROMPT
             | llm_4o
@@ -382,6 +410,9 @@ def generate_response(state: AgentState) -> AgentState:
         if not response:
             state.response = "I apologize, but I couldn't generate a meaningful response. Please try rephrasing your question."
         else:
+            # Add source indication to the response
+            if not state.documents_found:
+                response = "Based on web search results: " + response
             state.response = response
             
     except Exception as e:
@@ -406,12 +437,11 @@ builder = StateGraph(AgentState)
 # Add nodes
 builder.add_node("condense", condense_question)
 builder.add_node("detect_customer", detect_customer_name)
-builder.add_node("determine_search", determine_search_type)
 builder.add_node("customer_prompt", generate_customer_prompt)
-builder.add_node("web_search", perform_web_search)
 builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
+builder.add_node("web_search", perform_web_search)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
@@ -429,18 +459,12 @@ builder.add_conditional_edges(
 # From condense to detect_customer
 builder.add_edge("condense", "detect_customer")
 
-# From detect_customer to determine_search
-builder.add_edge("detect_customer", "determine_search")
-
-# From search type determination
+# From detect_customer to customer prompt or reason
 builder.add_conditional_edges(
-    "determine_search",
-    lambda x: "customer_prompt" if (not x.customer_name and x.needs_customer_prompt) else (
-        "web_search" if x.use_web_search else "reason"
-    ),
+    "detect_customer",
+    lambda x: "customer_prompt" if x.needs_customer_prompt else "reason",
     {
         "customer_prompt": "customer_prompt",
-        "web_search": "web_search",
         "reason": "reason"
     }
 )
@@ -448,18 +472,29 @@ builder.add_conditional_edges(
 # From customer prompt
 builder.add_conditional_edges(
     "customer_prompt",
-    lambda x: END if x.awaiting_customer_response else "determine_search",
+    lambda x: END if x.awaiting_customer_response else "reason",
     {
         END: END,
-        "determine_search": "determine_search"
+        "reason": "reason"
     }
 )
 
-# Rest of the flow
-builder.add_edge("web_search", "generate")
+# Main flow
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
-builder.add_edge("rerank", "generate")
+
+# After reranking, decide between web search and generation
+builder.add_conditional_edges(
+    "rerank",
+    lambda x: "generate" if x.documents_found else "web_search",
+    {
+        "generate": "generate",
+        "web_search": "web_search"
+    }
+)
+
+# Complete the flow
+builder.add_edge("web_search", "generate")
 builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
 

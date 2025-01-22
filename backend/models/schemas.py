@@ -41,12 +41,14 @@ class FileProcessingStatus(BaseModel):
 
 class AgentState(BaseModel):
     question: str
-    original_question: Optional[str] = None  # Add this field
+    original_question: Optional[str] = None
     chat_history: List[Message]
     documents: Optional[List[Document]] = None
     response: Optional[str] = None
     customer_name: Optional[str] = None
     needs_customer_prompt: bool = False
     awaiting_customer_response: bool = False
-    use_web_search: bool = False  # Whether to use web search
-    web_results: Optional[str] = None  # Store web search results
+    use_web_search: bool = False
+    web_results: Optional[str] = None
+    documents_found: bool = False
+    min_relevance_score: float = 0.5
