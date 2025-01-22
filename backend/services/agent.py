@@ -1,14 +1,13 @@
 # services/agent.py
 
 import logging
-import json
 from typing import List, Dict, Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from langgraph.graph import StateGraph, START, END
+from langgraph.graph import StateGraph, END
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.schema import StrOutputParser
@@ -135,75 +134,6 @@ def format_chat_history(chat_history: List[Message]) -> str:
             buffer.append(f"Assistant: {message.content}")
     return "\n".join(buffer)
 
-def detect_customer_name(state: AgentState) -> AgentState:
-    # Reset customer context for new standalone questions
-    if not state.chat_history:
-        state.customer_name = None
-        state.needs_customer_prompt = True
-    
-    # Check if this is a follow-up question in the same conversation
-    is_followup = False
-    if state.chat_history:
-        # Only consider the last few interactions to determine if it's a follow-up
-        recent_history = state.chat_history[-4:]  # Look at last 2 QA pairs
-        formatted_history = "\n".join([f"{m.role}: {m.content}" for m in recent_history])
-        
-        followup_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Analyze if the current question is a follow-up to the previous conversation about the same customer. Output JSON format with fields: is_followup (boolean)"),
-            ("user", "Chat history: {history}\nCurrent question: {question}")
-        ])
-        
-        chain = (
-            followup_prompt 
-            | llm_4o_mini 
-            | StrOutputParser() 
-            | json.loads
-        )
-        
-        result = chain.invoke({
-            "history": formatted_history,
-            "question": state.question
-        })
-        is_followup = result["is_followup"]
-    
-    # If it's not a follow-up question, reset customer context
-    if not is_followup:
-        state.customer_name = None
-        state.needs_customer_prompt = True
-        
-    # Now proceed with customer detection if needed
-    if state.needs_customer_prompt:
-        question_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Analyze the question to determine if it mentions a specific customer name. Output JSON format with fields: has_customer_name (boolean) and customer_name (string or null)"),
-            ("user", "{question}")
-        ])
-        
-        chain = (
-            question_prompt 
-            | llm_4o_mini 
-            | StrOutputParser() 
-            | json.loads
-        )
-        
-        result = chain.invoke({"question": state.question})
-        state.customer_name = result["customer_name"]
-        state.needs_customer_prompt = not result["has_customer_name"]
-    
-    return state
-
-def generate_customer_prompt(state: AgentState) -> AgentState:
-    if state.needs_customer_prompt:
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "Generate a polite prompt asking the user if they want to specify a customer name for their query."),
-            ("user", "Generate prompt for question: {question}")
-        ])
-        
-        response = prompt | llm_4o_mini | StrOutputParser()
-        state.awaiting_customer_response = True
-        state.response = response.invoke({"question": state.question})
-        return state
-    return state
-
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
     if not state.chat_history:  # Empty history
@@ -323,54 +253,22 @@ builder = StateGraph(AgentState)
 
 # Add nodes
 builder.add_node("condense", condense_question)
-builder.add_node("detect_customer", detect_customer_name)
-builder.add_node("customer_prompt", generate_customer_prompt)
-builder.add_node("reason", reason_about_query)
+builder.add_node("reason", reason_about_query)  # Add the reasoning node
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-# Start with condense if there's chat history
-builder.add_conditional_edges(
-    START,
-    lambda x: "condense" if x.chat_history else "detect_customer",
-    {
-        "condense": "condense",
-        "detect_customer": "detect_customer"
-    }
-)
-
-# From condense to detect_customer
-builder.add_edge("condense", "detect_customer")
-
-# From detect_customer to customer_prompt or reason
-builder.add_conditional_edges(
-    "detect_customer",
-    lambda x: "customer_prompt" if x.needs_customer_prompt else "reason",
-    {
-        "customer_prompt": "customer_prompt",
-        "reason": "reason"
-    }
-)
-
-# From customer_prompt
-builder.add_conditional_edges(
-    "customer_prompt",
-    lambda x: END if x.awaiting_customer_response else "reason",
-    {
-        END: END,
-        "reason": "reason"
-    }
-)
-
-# Rest of the flow
-builder.add_edge("reason", "retrieve")
+builder.add_edge("condense", "reason")  # Connect condense to reason
+builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
+
+# Set entry point
+builder.set_entry_point("condense")
 
 # Compile the graph
 agent = builder.compile()
