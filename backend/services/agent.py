@@ -136,32 +136,43 @@ def format_chat_history(chat_history: List[Message]) -> str:
     return "\n".join(buffer)
 
 def detect_customer_name(state: AgentState) -> AgentState:
-    # If customer name is already known from previous interactions, keep it
-    if state.customer_name:
-        state.needs_customer_prompt = False
-        return state
-        
-    # Check chat history for previous customer mentions
+    # Reset customer context for new standalone questions
+    if not state.chat_history:
+        state.customer_name = None
+        state.needs_customer_prompt = True
+    
+    # Check if this is a follow-up question in the same conversation
+    is_followup = False
     if state.chat_history:
-        history_prompt = ChatPromptTemplate.from_messages([
-            ("system", "Analyze the conversation history and current question to determine the customer context. Output JSON format with fields: has_customer_name (boolean) and customer_name (string or null). If a customer was previously mentioned and confirmed, use that customer name."),
+        # Only consider the last few interactions to determine if it's a follow-up
+        recent_history = state.chat_history[-4:]  # Look at last 2 QA pairs
+        formatted_history = "\n".join([f"{m.role}: {m.content}" for m in recent_history])
+        
+        followup_prompt = ChatPromptTemplate.from_messages([
+            ("system", "Analyze if the current question is a follow-up to the previous conversation about the same customer. Output JSON format with fields: is_followup (boolean)"),
             ("user", "Chat history: {history}\nCurrent question: {question}")
         ])
         
         chain = (
-            history_prompt 
+            followup_prompt 
             | llm_4o_mini 
             | StrOutputParser() 
             | json.loads
         )
         
-        formatted_history = "\n".join([f"{m.role}: {m.content}" for m in state.chat_history])
         result = chain.invoke({
             "history": formatted_history,
             "question": state.question
         })
-    else:
-        # No history, check just the current question
+        is_followup = result["is_followup"]
+    
+    # If it's not a follow-up question, reset customer context
+    if not is_followup:
+        state.customer_name = None
+        state.needs_customer_prompt = True
+        
+    # Now proceed with customer detection if needed
+    if state.needs_customer_prompt:
         question_prompt = ChatPromptTemplate.from_messages([
             ("system", "Analyze the question to determine if it mentions a specific customer name. Output JSON format with fields: has_customer_name (boolean) and customer_name (string or null)"),
             ("user", "{question}")
@@ -175,9 +186,8 @@ def detect_customer_name(state: AgentState) -> AgentState:
         )
         
         result = chain.invoke({"question": state.question})
-    
-    state.customer_name = result["customer_name"]
-    state.needs_customer_prompt = not result["has_customer_name"]
+        state.customer_name = result["customer_name"]
+        state.needs_customer_prompt = not result["has_customer_name"]
     
     return state
 
