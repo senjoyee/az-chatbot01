@@ -12,6 +12,7 @@ from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
+from .tools import RetrieverTool
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
@@ -21,6 +22,9 @@ from config.azure_search import vector_store
 from models.schemas import Message, AgentState
 
 logger = logging.getLogger(__name__)
+
+# Initialize the tool
+retriever_tool = RetrieverTool()
 
 # Constants for reranking
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -168,10 +172,15 @@ def reason_about_query(state: AgentState) -> AgentState:
 
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
-    state.documents = vector_store.hybrid_search(
-        state.question,
-        k=10,
-    )
+    try:
+        state.documents = retriever_tool.run({
+            "query": state.question,
+            "k": 10
+        })
+        logger.info(f"Retrieved {len(state.documents)} documents")
+    except Exception as e:
+        logger.error(f"Error retrieving documents: {str(e)}")
+        state.documents = []  # Ensure we have a valid state even on failure
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
