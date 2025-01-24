@@ -1,4 +1,4 @@
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict, Any, ClassVar
 from langchain_core.tools import BaseTool
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
