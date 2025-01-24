@@ -13,11 +13,11 @@ class RetrieverInput(BaseModel):
 
 class RetrieverTool(BaseTool):
     """Tool for retrieving documents using hybrid search."""
-    name = "document_retriever"
-    description = """Use this tool when you need to search for relevant documents.
+    name: ClassVar[str] = "document_retriever"
+    description: ClassVar[str] = """Use this tool when you need to search for relevant documents.
     It performs a hybrid search combining keyword and semantic search.
     Input should be a natural language query."""
-    args_schema = RetrieverInput
+    args_schema: ClassVar[type[BaseModel]] = RetrieverInput
 
     def _run(self, tool_input: dict) -> List[Document]:
         """Run the tool."""
