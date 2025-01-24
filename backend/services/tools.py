@@ -19,13 +19,13 @@ class RetrieverTool(BaseTool):
     Input should be a natural language query."""
     args_schema: ClassVar[type[BaseModel]] = RetrieverInput
 
-    def _run(self, query: str, k: int = 10, filter: Optional[Dict[str, Any]] = None) -> List[Document]:
+    def _run(self, query: str, k: int = 10, filters: Optional[Dict[str, Any]] = None) -> List[Document]:
         """Run the tool."""
         try:
             documents = vector_store.hybrid_search(
                 query,
                 k=k,
-                filter=filter
+                filters=filters
             )
             return documents
         except Exception as e:
