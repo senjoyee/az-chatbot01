@@ -5,13 +5,13 @@ on:
     branches:
       - main
     paths:
-      - 'application/backend/**'
+      - '/backend/**'
       - '.github/workflows/backend-deploy.yml'
   workflow_dispatch:
 
 env:
   PYTHON_VERSION: '3.11'
-  WORKING_DIRECTORY: ./application/backend
+  WORKING_DIRECTORY: ./backend
   AZURE_CONTAINER_REGISTRY: jssapmscr
   IMAGE_NAME: backend
   IMAGE_TAG: latest
