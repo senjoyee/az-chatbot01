@@ -53,6 +53,23 @@ llm_4o = AzureChatOpenAI(
     top_p=0.9
 )
 
+# List of customer names for filtering
+CUSTOMER_NAMES = [
+    "bsw",
+    "tbs",
+    "npac",
+    "asahi",
+    # Add more customer names here
+]
+
+def detect_customers(query: str) -> List[str]:
+    """
+    Detect customer names in the query string.
+    Returns a list of detected customer names (case-insensitive).
+    """
+    query_lower = query.lower()
+    return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
+
 # Prompt templates
 
 query_reasoning_template = """
@@ -173,9 +190,20 @@ def reason_about_query(state: AgentState) -> AgentState:
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
+        # Detect customers in the query
+        detected_customers = detect_customers(state.question)
+        filters = None
+        
+        if detected_customers:
+            # Create filter using OData syntax with search.in() function
+            customers_str = ",".join(f"'{c}'" for c in detected_customers)
+            filters = f"search.in(customer, {customers_str}, ',')"
+            logger.info(f"Applying customer filters: {filters}")
+        
         state.documents = retriever_tool.run({
             "query": state.question,
-            "k": 10
+            "k": 10,
+            "filters": filters
         })
         logger.info(f"Retrieved {len(state.documents)} documents")
     except Exception as e:
