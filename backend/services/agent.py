@@ -62,6 +62,23 @@ CUSTOMER_NAMES = [
     # Add more customer names here
 ]
 
+def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
+    """
+    Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
+    Returns a tuple of (detected_customers, use_and_operator).
+    """
+    query_lower = query.lower()
+    detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
+    
+    # Check if query implies ALL customers should be included
+    use_and = False
+    if len(detected) > 1:  # Only check for AND if multiple customers detected
+        # Look for indicators that user wants ALL customers
+        and_indicators = ['&', ' and ', ' both ', ' all ']
+        use_and = any(indicator in query_lower for indicator in and_indicators)
+    
+    return detected, use_and
+
 def detect_customers(query: str) -> List[str]:
     """
     Detect customer names in the query string.
@@ -190,15 +207,16 @@ def reason_about_query(state: AgentState) -> AgentState:
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
-        # Detect customers in the query
-        detected_customers = detect_customers(state.question)
+        # Detect customers and operator type in the query
+        detected_customers, use_and_operator = detect_customers_and_operator(state.question)
         filters = None
         
         if detected_customers:
-            # Create filter using OData syntax with search.in() function
-            customers_str = ",".join(f"'{c}'" for c in detected_customers)
-            filters = f"search.in(customer, {customers_str}, ',')"
-            logger.info(f"Applying customer filters: {filters}")
+            # For multiple customers, use AND or OR based on query analysis
+            filter_conditions = [f"customer eq '{c}'" for c in detected_customers]
+            operator = " and " if use_and_operator else " or "
+            filters = operator.join(filter_conditions)
+            logger.info(f"Applying customer filters with {operator.strip()} operator: {filters}")
         
         state.documents = retriever_tool.run({
             "query": state.question,
