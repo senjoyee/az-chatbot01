@@ -1,59 +1,24 @@
 import os
-import logging
-from operator import itemgetter
-from typing import List, Optional, Dict, Any
-from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form, WebSocket, WebSocketDisconnect
+from typing import List, Optional
+from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
-from azure.search.documents import SearchClient
-from azure.search.documents.indexes import SearchIndexClient
-from azure.search.documents.indexes.models import (
-    FreshnessScoringFunction,
-    FreshnessScoringParameters,
-    ScoringProfile,
-    SearchableField,
-    SearchField,
-    SearchFieldDataType,
-    SimpleField,
-    TextWeights,
-)
-from azure.core.credentials import AzureKeyCredential
-from langchain_openai import AzureOpenAIEmbeddings
-from langchain_community.vectorstores import AzureSearch
-from langchain.schema import Document, StrOutputParser, format_document
-from langchain.schema.runnable import RunnableParallel, RunnablePassthrough
-from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import AzureBlobStorageContainerLoader
-from langchain.chains import ConversationalRetrievalChain
 from azure.storage.blob import BlobServiceClient
-from dotenv import find_dotenv, load_dotenv
 from unstructured.partition.docx import partition_docx
 from unstructured.partition.pdf import partition_pdf
 from unstructured.chunking.title import chunk_by_title
-import tempfile
 import json
-import sys
-import asyncio
-from enum import Enum
 from datetime import datetime
-from typing import Dict, Optional
-from pydantic import BaseModel
-from azure_storage import AzureStorageManager, ProcessingStatus
 
 # Import utility functions
 from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata, extract_source
 from config.logging_config import setup_logging
-from config.settings import (
-    AZURE_SEARCH_SERVICE,
-    AZURE_SEARCH_KEY,
-    AZURE_SEARCH_INDEX,
-    AZURE_OPENAI_API_KEY,
-    AZURE_OPENAI_ENDPOINT,
-    BLOB_CONN_STRING,
-    BLOB_CONTAINER,
-    AZURE_SEARCH_SERVICE_ENDPOINT
-)
-from config.azure_search import vector_store, search_client, index_client, embeddings
+from config.settings import (BLOB_CONN_STRING, BLOB_CONTAINER)
+from config.azure_search import search_client, embeddings
+from models.schemas import ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
+from models.enums import ProcessingStatus
+from services.agent import run_agent
+from services.contextualizer import Contextualizer
+from azure_storage import AzureStorageManager
 
 # Setup logging using the configuration module
 logger = setup_logging()
@@ -61,12 +26,6 @@ logger = setup_logging()
 # Initialize storage services
 storage_manager = AzureStorageManager()
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
-
-# Import models from the new module
-from models.schemas import Message, Conversation, ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
-from models.enums import ProcessingStatus
-from services.agent import run_agent
-from services.contextualizer import Contextualizer
 
 contextualizer = Contextualizer()
 
