@@ -87,6 +87,17 @@ def detect_customers(query: str) -> List[str]:
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
+def detect_greeting_intent(query: str) -> bool:
+    """Detects if user input is a greeting using LLM"""
+    prompt = f"""Determine if the following message is a greeting or small talk. Respond ONLY with 'yes' or 'no'.
+
+Message: {query}
+
+Is this a greeting/small talk?"""
+    
+    response = llm_4o_mini.invoke(prompt).content.strip().lower()
+    return response == 'yes'
+
 # Prompt templates
 
 query_reasoning_template = """
@@ -330,6 +341,13 @@ agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
     """Runs the Langgraph agent."""
+    # Check for greeting first
+    if detect_greeting_intent(question):
+        return {
+            "response": "I'm doing well, thank you! How can I assist you today?",
+            "context": "Greeting detected - no document retrieval needed"
+        }
+    
     inputs = {
         "question": question,
         "chat_history": chat_history,
