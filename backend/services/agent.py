@@ -366,24 +366,27 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
             }
 
         # Proceed with document processing workflow
-        logger.debug("No greeting detected, initiating document processing")
+        logger.debug("Initiating document processing workflow")
         workflow = build_workflow()
-        inputs = {
-            "question": question,
-            "chat_history": chat_history,
-        }
-        result = await workflow.ainvoke(inputs)
+        inputs = AgentState(
+            question=question,
+            chat_history=chat_history,
+            documents=None,
+            response=None
+        )
+        
+        result = await workflow.ainvoke(inputs.dict())
         
         return {
-            "response": result.get("response", "I couldn't process that request"),
+            "response": result.get("response"),
             "context": result.get("context", "Document processing completed"),
             "status": "success"
         }
 
     except Exception as e:
-        logger.error(f"Agent processing error: {str(e)}")
+        logger.error(f"Agent processing error: {str(e)}", exc_info=True)
         return {
-            "response": "An error occurred while processing your request",
+            "response": "I encountered an error processing your request",
             "context": str(e),
             "status": "error"
         }
