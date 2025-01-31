@@ -327,30 +327,22 @@ def update_history(state: AgentState) -> AgentState:
     ])
     return state
 
-# Build the Langgraph
-builder = StateGraph(AgentState)
-
-# Add nodes
-builder.add_node("condense", condense_question)
-builder.add_node("reason", reason_about_query)  # Add the reasoning node
-builder.add_node("retrieve", retrieve_documents)
-builder.add_node("rerank", rerank_documents)
-builder.add_node("generate", generate_response)
-builder.add_node("update_history", update_history)
-
-# Add edges
-builder.add_edge("condense", "reason")  # Connect condense to reason
-builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
-builder.add_edge("retrieve", "rerank")
-builder.add_edge("rerank", "generate")
-builder.add_edge("generate", "update_history")
-builder.add_edge("update_history", END)
-
-# Set entry point
-builder.set_entry_point("condense")
-
-# Compile the graph
-agent = builder.compile()
+def build_workflow() -> StateGraph:
+    """Builds and returns the Langgraph workflow"""
+    builder = StateGraph(AgentState)
+    
+    # Add core workflow nodes
+    builder.add_node("condense", condense_question)
+    builder.add_node("retrieve", retrieve_documents)
+    builder.add_node("generate", generate_response)
+    
+    # Set up linear workflow
+    builder.set_entry_point("condense")
+    builder.add_edge("condense", "retrieve")
+    builder.add_edge("retrieve", "generate")
+    builder.add_edge("generate", END)
+    
+    return builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
     """Runs the Langgraph agent with greeting detection."""
@@ -368,18 +360,18 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
         # Proceed with document processing workflow
         logger.debug("Initiating document processing workflow")
         workflow = build_workflow()
-        inputs = AgentState(
-            question=question,
-            chat_history=chat_history,
-            documents=None,
-            response=None
-        )
+        inputs = {
+            "question": question,
+            "chat_history": chat_history,
+            "documents": [],
+            "response": None
+        }
         
-        result = await workflow.ainvoke(inputs.dict())
+        result = await workflow.ainvoke(inputs)
         
         return {
             "response": result.get("response"),
-            "context": result.get("context", "Document processing completed"),
+            "context": "Document processing completed",
             "status": "success"
         }
 
