@@ -1,7 +1,7 @@
 # services/agent.py
 
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -87,16 +87,29 @@ def detect_customers(query: str) -> List[str]:
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
-def detect_greeting_intent(query: str) -> bool:
-    """Detects if user input is a greeting using LLM"""
-    prompt = f"""Determine if the following message is a greeting or small talk. Respond ONLY with 'yes' or 'no'.
-
-Message: {query}
-
-Is this a greeting/small talk?"""
+def detect_greeting_intent(query: str) -> Optional[str]:
+    """Detects greeting intent and generates contextual response using LLM"""
+    prompt = f"""Analyze this message and respond appropriately:
     
-    response = llm_4o_mini.invoke(prompt).content.strip().lower()
-    return response == 'yes'
+    Message: {query}
+    
+    If the message is a greeting or small talk:
+    - Generate a friendly response that:
+      * Acknowledges the greeting naturally
+      * Offers assistance
+      * Matches the user's tone
+    
+    If NOT a greeting, respond ONLY with: <!--not-greeting-->
+    
+    Examples:
+    User: Hello!
+    Response: Hello! How can I assist you today?
+    User: How's it going?
+    Response: All systems operational! How may I help you?
+    """
+    
+    response = llm_4o_mini.invoke(prompt).content.strip()
+    return response if "<!--not-greeting-->" not in response else None
 
 # Prompt templates
 
@@ -340,26 +353,37 @@ builder.set_entry_point("condense")
 agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
-    """Runs the Langgraph agent."""
-    # Check for greeting first
-    if detect_greeting_intent(question):
-        return {
-            "response": "I'm doing well, thank you! How can I assist you today?",
-            "context": "Greeting detected - no document retrieval needed"
-        }
-    
-    inputs = {
-        "question": question,
-        "chat_history": chat_history,
-        "documents": None,
-        "response": None
-    }
+    """Runs the Langgraph agent with greeting detection."""
     try:
-        result = await agent.ainvoke(inputs)
-        return {
-            "response": result["response"],
-            "chat_history": result["chat_history"]
+        # Generate contextual greeting response if applicable
+        greeting_response = detect_greeting_intent(question)
+        if greeting_response:
+            logger.info(f"Generated greeting response: {greeting_response}")
+            return {
+                "response": greeting_response,
+                "context": "Dynamic greeting response",
+                "status": "success"
+            }
+
+        # Proceed with document processing workflow
+        logger.debug("No greeting detected, initiating document processing")
+        workflow = build_workflow()
+        inputs = {
+            "question": question,
+            "chat_history": chat_history,
         }
+        result = await workflow.ainvoke(inputs)
+        
+        return {
+            "response": result.get("response", "I couldn't process that request"),
+            "context": result.get("context", "Document processing completed"),
+            "status": "success"
+        }
+
     except Exception as e:
-        logger.error(f"Agent execution error: {str(e)}")
-        return {"response": "An error occurred while processing your request.", "chat_history": chat_history}
+        logger.error(f"Agent processing error: {str(e)}")
+        return {
+            "response": "An error occurred while processing your request",
+            "context": str(e),
+            "status": "error"
+        }
