@@ -1,7 +1,7 @@
 # services/agent.py
 
 import logging
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
@@ -69,14 +69,14 @@ def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
     """
     query_lower = query.lower()
     detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-    
+
     # Check if query implies ALL customers should be included
     use_and = False
     if len(detected) > 1:  # Only check for AND if multiple customers detected
         # Look for indicators that user wants ALL customers
         and_indicators = ['&', ' and ', ' both ', ' all ']
         use_and = any(indicator in query_lower for indicator in and_indicators)
-    
+
     return detected, use_and
 
 def detect_customers(query: str) -> List[str]:
@@ -86,30 +86,6 @@ def detect_customers(query: str) -> List[str]:
     """
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
-def detect_greeting_intent(query: str) -> Optional[str]:
-    """Detects greeting intent and generates contextual response using LLM"""
-    prompt = f"""Analyze this message and respond appropriately:
-    
-    Message: {query}
-    
-    If the message is a greeting or small talk:
-    - Generate a friendly response that:
-      * Acknowledges the greeting naturally
-      * Offers assistance
-      * Matches the user's tone
-    
-    If NOT a greeting, respond ONLY with: <!--not-greeting-->
-    
-    Examples:
-    User: Hello!
-    Response: Hello! How can I assist you today?
-    User: How's it going?
-    Response: All systems operational! How may I help you?
-    """
-    
-    response = llm_4o_mini.invoke(prompt).content.strip()
-    return response if "<!--not-greeting-->" not in response else None
 
 # Prompt templates
 
@@ -131,7 +107,6 @@ Here is the user's original query:
 
 Rewrite the query following the guidelines above. Think carefully about how to improve the query's effectiveness in retrieving relevant documents.
 """
-
 QUERY_REASONING_PROMPT = PromptTemplate.from_template(query_reasoning_template)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
@@ -183,7 +158,6 @@ Provide your answer within <answer> tags. If you need to ask for clarification, 
 
 Remember, your goal is to provide accurate, helpful information based on the documents provided, while maintaining a friendly and professional demeanor.
 """
-
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
 def format_chat_history(chat_history: List[Message]) -> str:
@@ -196,11 +170,66 @@ def format_chat_history(chat_history: List[Message]) -> str:
             buffer.append(f"Assistant: {message.content}")
     return "\n".join(buffer)
 
+# === New functions for enhanced conversation flow ===
+
+def handle_greetings(state: AgentState) -> AgentState:
+    """
+    If a greeting is detected in the user's question, immediately generate a friendly response.
+    """
+    greeting_keywords = ["hello", "hi", "hey", "how are you", "greetings"]
+    if any(kw in state.question.lower() for kw in greeting_keywords):
+        # Generate an immediate greeting response using the language model
+        prompt = f"Generate a friendly and appropriate response to this greeting: '{state.question}'."
+        response = llm_4o.invoke(prompt)
+        state.response = response.strip()
+        state.skip_flow = True  # Skip remaining nodes
+        logger.info("Greeting detected. Skipping further processing.")
+    return state
+
+def check_customer_query(state: AgentState) -> AgentState:
+    """
+    Determine if the user's query is about a customer using the LLM.
+    If the query does not mention a customer explicitly, ask for clarification.
+    """
+    if detect_customers(state.question):
+        # If a customer is mentioned via keywords, continue as usual.
+        return state
+    else:
+        # Use LLM to decide if the query implies customer specificity.
+        prompt = f"Does the following question imply a customer-specific inquiry? Answer yes or no.\nQuestion: {state.question}"
+        result = llm_4o_mini.invoke(prompt)
+        if "yes" in result.lower():
+            # If the LLM thinks it is a customer-specific inquiry but no customer was mentioned,
+            # ask the user for clarification.
+            state.response = "Could you please specify which customer you are referring to?"
+            state.skip_flow = True  # Skip further processing until clarification is provided.
+            logger.info("Customer-specific question detected without a specified customer.")
+        else:
+            # Mark that no customer is specified; search broadly or with no filter.
+            state.use_all_customers = True  # This flag can be used in filtering logic.
+            logger.info("No customer-specific inquiry detected; proceeding with a broad search.")
+    return state
+
+def preprocess(state: AgentState) -> AgentState:
+    """
+    Preprocess the conversation by handling greetings and customer query checks.
+    """
+    state = handle_greetings(state)
+    # If skip_flow is set, immediately return the state without further processing.
+    if getattr(state, "skip_flow", False):
+        return state
+    state = check_customer_query(state)
+    return state
+
+# Modification in existing nodes to check for skip_flow
+
 def condense_question(state: AgentState) -> AgentState:
+    if getattr(state, "skip_flow", False):
+        return state
     logger.info(f"Condensing question with state: {state}")
     if not state.chat_history:  # Empty history
         return state
-        
+
     _input = (
         RunnableLambda(lambda x: {
             "chat_history": format_chat_history(x.chat_history),
@@ -215,11 +244,13 @@ def condense_question(state: AgentState) -> AgentState:
     return state
 
 def reason_about_query(state: AgentState) -> AgentState:
+    if getattr(state, "skip_flow", False):
+        return state
     logger.info(f"Reasoning about query with state: {state}")
     _input = (
         RunnableLambda(lambda x: {"question": x.question})
         | QUERY_REASONING_PROMPT
-        | llm_4o_mini   
+        | llm_4o_mini
         | StrOutputParser()
     )
     rewritten_query = _input.invoke(state)
@@ -229,19 +260,21 @@ def reason_about_query(state: AgentState) -> AgentState:
     return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
+    if getattr(state, "skip_flow", False):
+        return state
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
-        # Detect customers and operator type in the query
+        # Detect customers and operator type in the query only if not in broad search mode
         detected_customers, use_and_operator = detect_customers_and_operator(state.question)
         filters = None
-        
-        if detected_customers:
+
+        if detected_customers and not getattr(state, "use_all_customers", False):
             # For multiple customers, use AND or OR based on query analysis
             filter_conditions = [f"customer eq '{c}'" for c in detected_customers]
             operator = " and " if use_and_operator else " or "
             filters = operator.join(filter_conditions)
             logger.info(f"Applying customer filters with {operator.strip()} operator: {filters}")
-        
+
         state.documents = retriever_tool.run({
             "query": state.question,
             "k": 10,
@@ -254,11 +287,13 @@ def retrieve_documents(state: AgentState) -> AgentState:
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
+    if getattr(state, "skip_flow", False):
+        return state
     logger.info("Reranking documents")
-    
+
     query = state.question
     documents = state.documents
-    
+
     # Prepare inputs for reranking
     text_pairs = [(query, doc.page_content) for doc in documents]
     inputs = reranker_tokenizer.batch_encode_plus(
@@ -268,37 +303,39 @@ def rerank_documents(state: AgentState) -> AgentState:
         return_tensors="pt",
         max_length=512
     )
-    
+
     # Get scores
     with torch.no_grad():
         scores = reranker_model(**inputs).logits.squeeze()
-    
+
     # Convert scores to list if it's a tensor
     if torch.is_tensor(scores):
         scores = scores.tolist()
-    
+
     # Sort documents by score
     scored_docs = list(zip(documents, scores))
     scored_docs.sort(key=lambda x: x[1], reverse=True)
-    
+
     # Update state with reranked documents
     state.documents = [doc for doc, _ in scored_docs]
     return state
 
 def generate_response(state: AgentState) -> AgentState:
+    if getattr(state, "skip_flow", False):
+        return state
     logger.info("Generating response")
-    
+
     if not state.documents:
         state.response = "I couldn't find any relevant information to answer your question."
         return state
-    
+
     # Use only top K documents
     TOP_K_DOCUMENTS = 3
     top_documents = state.documents[:TOP_K_DOCUMENTS]
-    
+
     context = "\n\n".join(doc.page_content for doc in top_documents)
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
-    
+
     _input = (
         RunnableLambda(lambda x: {
             "context": context,
@@ -308,16 +345,18 @@ def generate_response(state: AgentState) -> AgentState:
         | llm_4o
         | StrOutputParser()
     )
-    
+
     response = _input.invoke(state)
-    
+
     # Strip <answer> tags from the response
     response = response.replace("<answer>", "").replace("</answer>", "").strip()
-    
+
     state.response = response
     return state
 
 def update_history(state: AgentState) -> AgentState:
+    if getattr(state, "skip_flow", False):
+        return state
     logger.info(f"Updating history with state: {state}")
     if not state.chat_history:
         state.chat_history = []
@@ -327,58 +366,47 @@ def update_history(state: AgentState) -> AgentState:
     ])
     return state
 
-def build_workflow() -> StateGraph:
-    """Builds and returns the Langgraph workflow"""
-    builder = StateGraph(AgentState)
-    
-    # Add core workflow nodes
-    builder.add_node("condense", condense_question)
-    builder.add_node("retrieve", retrieve_documents)
-    builder.add_node("generate", generate_response)
-    
-    # Set up linear workflow
-    builder.set_entry_point("condense")
-    builder.add_edge("condense", "retrieve")
-    builder.add_edge("retrieve", "generate")
-    builder.add_edge("generate", END)
-    
-    return builder.compile()
+# Build the Langgraph
+builder = StateGraph(AgentState)
+
+# Add new preprocessing node as the entry point
+builder.add_node("preprocess", preprocess)
+builder.add_node("condense", condense_question)
+builder.add_node("reason", reason_about_query)  # Add the reasoning node
+builder.add_node("retrieve", retrieve_documents)
+builder.add_node("rerank", rerank_documents)
+builder.add_node("generate", generate_response)
+builder.add_node("update_history", update_history)
+
+# Add edges for updated flow
+builder.add_edge("preprocess", "condense")  # Connect preprocess to condense
+builder.add_edge("condense", "reason")  # Connect condense to reason
+builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
+builder.add_edge("retrieve", "rerank")
+builder.add_edge("rerank", "generate")
+builder.add_edge("generate", "update_history")
+builder.add_edge("update_history", END)
+
+# Set entry point to the new preprocessing node
+builder.set_entry_point("preprocess")
+
+# Compile the graph
+agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
-    """Runs the Langgraph agent with greeting detection."""
+    """Runs the Langgraph agent."""
+    inputs = {
+        "question": question,
+        "chat_history": chat_history,
+        "documents": None,
+        "response": None
+    }
     try:
-        # Generate contextual greeting response if applicable
-        greeting_response = detect_greeting_intent(question)
-        if greeting_response:
-            logger.info(f"Generated greeting response: {greeting_response}")
-            return {
-                "response": greeting_response,
-                "context": "Dynamic greeting response",
-                "status": "success"
-            }
-
-        # Proceed with document processing workflow
-        logger.debug("Initiating document processing workflow")
-        workflow = build_workflow()
-        inputs = {
-            "question": question,
-            "chat_history": chat_history,
-            "documents": [],
-            "response": None
-        }
-        
-        result = await workflow.ainvoke(inputs)
-        
+        result = await agent.ainvoke(inputs)
         return {
-            "response": result.get("response"),
-            "context": "Document processing completed",
-            "status": "success"
+            "response": result["response"],
+            "chat_history": result["chat_history"]
         }
-
     except Exception as e:
-        logger.error(f"Agent processing error: {str(e)}", exc_info=True)
-        return {
-            "response": "I encountered an error processing your request",
-            "context": str(e),
-            "status": "error"
-        }
+        logger.error(f"Agent execution error: {str(e)}")
+        return {"response": "An error occurred while processing your request.", "chat_history": chat_history}
