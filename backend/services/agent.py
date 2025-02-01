@@ -256,8 +256,11 @@ def check_customer_specification(state: AgentState) -> AgentState:
     Chat History: {chat_context}
     
     Answer ONLY yes/no:"""
+
+    customer_response = llm_4o_mini.invoke(prompt)
+    customer_intent = customer_response.content.strip().lower()
     
-    if llm_4o_mini.invoke(prompt).strip().lower() == "yes":
+    if customer_intent == "yes":
         state.response = "Please specify which customer this request pertains to."
         state.should_stop = True
     
