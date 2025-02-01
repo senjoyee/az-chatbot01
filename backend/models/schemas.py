@@ -47,3 +47,5 @@ class AgentState(BaseModel):
     response: Optional[str] = None
     should_stop: bool = False
     conversation_turns: int = 0  # New field to track conversation progression
+    customer: Optional[str] = Field(None, description="Active customer context")
+

@@ -240,7 +240,7 @@ def check_customer_specification(state: AgentState) -> AgentState:
     chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
     if history_customers := detect_customers(chat_context):
         logger.info(f"Using historical customer context: {history_customers}")
-        state.customer = history_customers[0]  # Take first match
+        state.detected_customer = history_customers  # Take first match
         return state
     
     # 3. Check for contact/keyword triggers
