@@ -188,6 +188,7 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
             | StrOutputParser()
         )
         state.response = _input.invoke(state)
+        state.should_stop = True  # Set stop flag
         return state
 
     detected_customers = detect_customers(state.question)
@@ -336,7 +337,10 @@ builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-builder.add_edge("check_initial", "condense")
+builder.add_conditional_edges(
+    "check_initial",
+    lambda state: END if state.should_stop else "condense"
+)
 builder.add_edge("condense", "reason")
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")

@@ -41,7 +41,8 @@ class FileProcessingStatus(BaseModel):
 
 class AgentState(BaseModel):
     question: str
-    original_question: Optional[str] = None  # Add this field
+    original_question: Optional[str] = None
     chat_history: List[Message]
     documents: Optional[List[Document]] = None
     response: Optional[str] = None
+    should_stop: bool = False  # Controls workflow termination
