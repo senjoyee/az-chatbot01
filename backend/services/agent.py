@@ -34,7 +34,7 @@ logger.info(f"Initializing reranking model: {RERANKER_MODEL_NAME}")
 reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_NAME)
 reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_NAME)
 
-# Initialize the language models
+# Initialize the language model
 llm_4o_mini = AzureChatOpenAI(
     azure_deployment="gpt-4o-mini",
     openai_api_version="2023-03-15-preview",
@@ -107,7 +107,6 @@ Here is the user's original query:
 
 Rewrite the query following the guidelines above. Think carefully about how to improve the query's effectiveness in retrieving relevant documents.
 """
-
 QUERY_REASONING_PROMPT = PromptTemplate.from_template(query_reasoning_template)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
@@ -159,8 +158,14 @@ Provide your answer within <answer> tags. If you need to ask for clarification, 
 
 Remember, your goal is to provide accurate, helpful information based on the documents provided, while maintaining a friendly and professional demeanor.
 """
-
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
+
+# Additional prompt templates for greeting and customer detection
+greeting_template = "Provide a friendly, concise greeting response for the following query: '{question}'"
+GREETINGS_PROMPT = PromptTemplate.from_template(greeting_template)
+
+customer_detection_template = "Does the following query require customer-specific documents? Answer only yes or no. Query: '{question}'"
+CUSTOMER_DETECTION_PROMPT = PromptTemplate.from_template(customer_detection_template)
 
 def format_chat_history(chat_history: List[Message]) -> str:
     """Format chat history for the model."""
@@ -175,8 +180,8 @@ def format_chat_history(chat_history: List[Message]) -> str:
 def check_greeting_and_customer(state: AgentState) -> AgentState:
     """
     Checks if the user's query is a greeting and responds immediately.
-    Additionally, if no customer is mentioned, uses an LLM to decide if the query expects customer-specific information.
-    If yes, asks the user to specify the customer.
+    Additionally, if no customer is mentioned in the query, uses an LLM to decide if the query
+    expects customer-specific information. If so, asks the user to specify the customer.
     """
     if state.response:
         return state
@@ -184,7 +189,7 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
     greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'how are you']
     if any(greet in state.question.lower() for greet in greetings):
         _input = (
-            RunnableLambda(lambda x: {"question": f"Provide a friendly, concise greeting response for: '{x.question}'"})
+            RunnableLambda(lambda x: GREETINGS_PROMPT.format(question=x.question))
             | llm_4o
             | StrOutputParser()
         )
@@ -194,7 +199,7 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
     detected_customers = detect_customers(state.question)
     if not detected_customers:
         _input = (
-            RunnableLambda(lambda x: {"question": f"Does the following query require customer-specific documents? Answer only yes or no. Query: '{x.question}'"})
+            RunnableLambda(lambda x: CUSTOMER_DETECTION_PROMPT.format(question=x.question))
             | llm_4o_mini
             | StrOutputParser()
         )
@@ -202,21 +207,18 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
         if customer_intent.strip().lower().startswith("yes"):
             state.response = "It seems you're asking for customer-specific information. Could you please specify the customer name?"
             return state
+
     return state
 
 def condense_question(state: AgentState) -> AgentState:
-    if state.response:
-        return state
     logger.info(f"Condensing question with state: {state}")
     if not state.chat_history:  # Empty history
         return state
-
     _input = (
-        RunnableLambda(lambda x: {
-            "chat_history": format_chat_history(x.chat_history),
-            "question": x.question
-        })
-        | CONDENSE_QUESTION_PROMPT
+        RunnableLambda(lambda x: CONDENSE_QUESTION_PROMPT.format(
+            chat_history=format_chat_history(x.chat_history),
+            question=x.question)
+        )
         | llm_4o_mini
         | StrOutputParser()
     )
@@ -225,12 +227,9 @@ def condense_question(state: AgentState) -> AgentState:
     return state
 
 def reason_about_query(state: AgentState) -> AgentState:
-    if state.response:
-        return state
     logger.info(f"Reasoning about query with state: {state}")
     _input = (
-        RunnableLambda(lambda x: {"question": x.question})
-        | QUERY_REASONING_PROMPT
+        RunnableLambda(lambda x: QUERY_REASONING_PROMPT.format(question=x.question))
         | llm_4o_mini
         | StrOutputParser()
     )
@@ -241,8 +240,6 @@ def reason_about_query(state: AgentState) -> AgentState:
     return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
-    if state.response:
-        return state
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
         # Detect customers and operator type in the query
@@ -268,8 +265,6 @@ def retrieve_documents(state: AgentState) -> AgentState:
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
-    if state.response:
-        return state
     logger.info("Reranking documents")
 
     query = state.question
@@ -302,8 +297,6 @@ def rerank_documents(state: AgentState) -> AgentState:
     return state
 
 def generate_response(state: AgentState) -> AgentState:
-    if state.response:
-        return state
     logger.info("Generating response")
 
     if not state.documents:
@@ -318,11 +311,7 @@ def generate_response(state: AgentState) -> AgentState:
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
 
     _input = (
-        RunnableLambda(lambda x: {
-            "context": context,
-            "question": x.question
-        })
-        | ANSWER_PROMPT
+        RunnableLambda(lambda x: ANSWER_PROMPT.format(context=context, question=x.question))
         | llm_4o
         | StrOutputParser()
     )
@@ -349,7 +338,6 @@ def update_history(state: AgentState) -> AgentState:
 builder = StateGraph(AgentState)
 
 # Add nodes
-builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
 builder.add_node("reason", reason_about_query)  # Add the reasoning node
 builder.add_node("retrieve", retrieve_documents)
@@ -358,7 +346,6 @@ builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Add edges
-builder.add_edge("check_initial", "condense")
 builder.add_edge("condense", "reason")  # Connect condense to reason
 builder.add_edge("reason", "retrieve")  # Connect reason to retrieve
 builder.add_edge("retrieve", "rerank")
@@ -367,7 +354,7 @@ builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
 
 # Set entry point
-builder.set_entry_point("check_initial")
+builder.set_entry_point("condense")
 
 # Compile the graph
 agent = builder.compile()
