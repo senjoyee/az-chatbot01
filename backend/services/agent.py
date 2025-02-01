@@ -192,8 +192,9 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
 
     detected_customers = detect_customers(state.question)
     if not detected_customers:
+        logger.info("No customer detected in the query.")
         _input = (
-            RunnableLambda(lambda x: {"question": f"Does the following query require customer-specific documents? Answer only yes or no. Query: '{x.question}'"})
+            RunnableLambda(lambda x: f"Does the following query require customer-specific documents? Answer only yes or no. Query: '{x.question}'")  # Direct string output
             | llm_4o_mini
             | StrOutputParser()
         )
