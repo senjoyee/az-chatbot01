@@ -3,6 +3,7 @@
 import logging
 from typing import List, Dict, Any
 import torch
+import re
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -180,15 +181,31 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
     if state.response:
         return state
 
-    greetings = ['hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening', 'how are you']
-    if any(greet in state.question.lower() for greet in greetings):
+    greetings = {
+        'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning', r'good afternoon', r'good evening', r'how are you'],
+        'response': [r'\bi\'m good\b', r'\bdoing great\b', r'\bnot bad\b', r'\bfine thanks\b', r'\bpretty good\b', r'\ball good\b']
+    }
+    # Check for initial greetings with regex
+    lower_question = state.question.lower()
+    if any(re.search(pattern, lower_question) for pattern in greetings['initial']):
         _input = (
-            RunnableLambda(lambda x: f"Provide a friendly, concise greeting response for: '{x.question}'")
-            | llm_4o
+            RunnableLambda(lambda x: f"Provide a friendly greeting response to: '{x.question}'")
+            | llm_4o  # Revert to original LLM
             | StrOutputParser()
         )
         state.response = _input.invoke(state)
-        state.should_stop = True  # Set stop flag
+        state.should_stop = True
+        return state
+
+    # Check for follow-ups with exact matches
+    if any(re.search(pattern, lower_question) for pattern in greetings['response']):
+        _input = (
+            RunnableLambda(lambda x: f"Acknowledge the response and offer help: '{x.question}'")
+            | llm_4o  # Original LLM for quality
+            | StrOutputParser()
+        )
+        state.response = _input.invoke(state)
+        state.should_stop = True
         return state
 
     detected_customers = detect_customers(state.question)
