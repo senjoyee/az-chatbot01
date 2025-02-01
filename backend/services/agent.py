@@ -231,34 +231,36 @@ def condense_question(state: AgentState) -> AgentState:
     return state
 
 def check_customer_specification(state: AgentState) -> AgentState:
-    # Add contact-specific detection
-    contact_keywords = ["contacts", "point of contact", "escalation list"]
-    if any(kw in state.question.lower() for kw in contact_keywords):
-        state.response = "Which customer's contacts are you requesting?"
+    # 1. Check for explicit customer mentions
+    if detected := detect_customers(state.question):
+        logger.info(f"Detected customers: {detected}")
+        return state
+    
+    # 2. Check chat history (last 3 messages)
+    chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
+    if history_customers := detect_customers(chat_context):
+        logger.info(f"Using historical customer context: {history_customers}")
+        state.customer = history_customers[0]  # Take first match
+        return state
+    
+    # 3. Check for contact/keyword triggers
+    contact_triggers = {"contacts", "point of contact", "escalation"}
+    if any(trigger in state.question.lower() for trigger in contact_triggers):
+        state.response = "Which customer's contact information are you requesting?"
         state.should_stop = True
         return state
-
-    # Existing detection logic
-    detected_customers = detect_customers(state.question)
-    if detected_customers:
-        return state
-
-    # Improved LLM prompt
-    prompt = f"""Determine if this query requires customer-specific context:
+    
+    # 4. Final LLM verification
+    prompt = f"""Should this query be handled with customer-specific documents?
     Query: {state.question}
-    Document Types Available: 
-    - Customer-specific contacts
-    - General process documents
+    Chat History: {chat_context}
     
-    Should this query be routed to customer-specific documents? 
-    Answer ONLY 'yes' or 'no'"""
+    Answer ONLY yes/no:"""
     
-    customer_intent = llm_4o_mini.invoke(prompt)
-    
-    if customer_intent.strip().lower() == "yes":
-        state.response = "Please specify the customer name for this request."
+    if llm_4o_mini.invoke(prompt).strip().lower() == "yes":
+        state.response = "Please specify which customer this request pertains to."
         state.should_stop = True
-
+    
     return state
 
 def reason_about_query(state: AgentState) -> AgentState:
