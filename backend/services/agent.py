@@ -384,12 +384,12 @@ builder.add_node("update_history", update_history)
 # Edges
 builder.add_conditional_edges(
     "check_initial",
-    lambda s: END if s.get("should_stop") else "condense"
+    lambda s: END if s.should_stop else "condense"
 )
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: END if s.get("should_stop") else "reason"
+    lambda s: END if s.should_stop else "reason"
 )
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
