@@ -171,57 +171,45 @@ def format_chat_history(chat_history: List[Message]) -> str:
     return "\n".join(buffer)
 
 def check_greeting_and_customer(state: AgentState) -> AgentState:
-    """Handles greetings, conversation flow, and customer detection."""
+    """Handles greetings and conversation flow management."""
     if state.response:
         return state
 
-    # Increment conversation turns
     state.conversation_turns += 1
-
-    greetings = {
-        'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning', r'good afternoon', r'good evening', r'how are you'],
-        'response': [r'\bi\'m good\b', r'\bdoing great\b', r'\bnot bad\b', r'\bfine thanks\b', r'\bpretty good\b', r'\ball good\b']
-    }
-
     lower_question = state.question.lower()
 
-    # First turn: Initial greeting
-    if state.conversation_turns == 1 and any(re.search(pattern, lower_question) for pattern in greetings['initial']):
-        _input = (
-            RunnableLambda(lambda x: f"Respond to the greeting by politely directing the user to state their specific document-related query: '{x.question}'")
-            | llm_4o
-            | StrOutputParser()
-        )
-        state.response = _input.invoke(state)
-        state.should_stop = True
-        return state
+    # Greeting pattern definitions
+    greeting_patterns = {
+        'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning', 
+                   r'good afternoon', r'good evening', r'how are you'],
+        'response': [r'\bi\'m good\b', r'\bdoing great\b', r'\bnot bad\b',
+                    r'\bfine thanks\b', r'\bpretty good\b', r'\ball good\b']
+    }
 
-    # Subsequent turns: Casual conversation
-    if any(re.search(pattern, lower_question) for pattern in greetings['response']):
-        state.response = (
-            "I appreciate your friendliness, but I'm an AI assistant focused on answering questions about specific documents. "
-            "Could you please ask a clear, document-related question? I'm here to help you find information efficiently."
-        )
-        state.should_stop = True
-        return state
+    # Initial greeting handling
+    if state.conversation_turns == 1:
+        for pattern in greeting_patterns['initial']:
+            if re.search(pattern, lower_question):
+                _input = (
+                    RunnableLambda(lambda x: f"Respond to greeting and direct to docs: '{x.question}'")
+                    | llm_4o
+                    | StrOutputParser()
+                )
+                state.response = _input.invoke(state)
+                state.should_stop = True
+                return state
 
-    # Reset conversation turns if a substantive query is detected
-    state.conversation_turns = 0
-
-    # Continue with existing customer detection logic
-    detected_customers = detect_customers(state.question)
-    if not detected_customers:
-        logger.info("No customer detected in the query.")
-        _input = (
-            RunnableLambda(lambda x: f"Does the following query require customer-specific documents? Answer only yes or no. Query: '{x.question}'")  # Direct string output
-            | llm_4o_mini
-            | StrOutputParser()
-        )
-        customer_intent = _input.invoke(state)
-        if customer_intent.strip().lower().startswith("yes"):
-            state.response = "It seems you're asking for customer-specific information. Could you please specify the customer name?"
+    # Follow-up casual conversation handling
+    for pattern in greeting_patterns['response']:
+        if re.search(pattern, lower_question):
+            state.response = (
+                "I'm here to help with document-related questions. "
+                "Please ask about specific documents or policies."
+            )
+            state.should_stop = True
             return state
 
+    state.conversation_turns = 0
     return state
 
 def condense_question(state: AgentState) -> AgentState:
@@ -240,6 +228,43 @@ def condense_question(state: AgentState) -> AgentState:
     )
     result = _input.invoke(state)
     state.question = result
+    return state
+
+def check_customer_specification(state: AgentState) -> AgentState:
+    """
+    Determines if query requires customer context using:
+    - Current condensed question
+    - Chat history analysis
+    """
+    # First check explicit customer mentions
+    detected_customers = detect_customers(state.question)
+    if detected_customers:
+        return state
+
+    # Then check chat history for customer context
+    chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
+    history_customers = detect_customers(chat_context)
+    if history_customers:
+        logger.info(f"Inferred customer from history: {history_customers}")
+        return state
+
+    # Final check with LLM if customer context is needed
+    prompt = f"""Analyze if this query requires customer-specific documents:
+    Query: {state.question}
+    Chat History Context: {chat_context}
+    
+    Answer ONLY 'yes' or 'no'"""
+    
+    customer_intent = (
+        RunnableLambda(lambda x: prompt)
+        | llm_4o_mini
+        | StrOutputParser()
+    ).invoke(state)
+
+    if customer_intent.strip().lower() == "yes":
+        state.response = "Please specify the customer name for this inquiry."
+        state.should_stop = True
+
     return state
 
 def reason_about_query(state: AgentState) -> AgentState:
@@ -346,21 +371,26 @@ def update_history(state: AgentState) -> AgentState:
 # Build the Langgraph
 builder = StateGraph(AgentState)
 
-# Add nodes
+# Nodes
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
+builder.add_node("check_customer", check_customer_specification)  # New node
 builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
-# Add edges
+# Edges
 builder.add_conditional_edges(
     "check_initial",
-    lambda state: END if state.should_stop else "condense"
+    lambda s: END if s.get("should_stop") else "condense"
 )
-builder.add_edge("condense", "reason")
+builder.add_edge("condense", "check_customer")
+builder.add_conditional_edges(
+    "check_customer",
+    lambda s: END if s.get("should_stop") else "reason"
+)
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
