@@ -45,4 +45,5 @@ class AgentState(BaseModel):
     chat_history: List[Message]
     documents: Optional[List[Document]] = None
     response: Optional[str] = None
-    should_stop: bool = False  # Controls workflow termination
+    should_stop: bool = False
+    conversation_turns: int = 0  # New field to track conversation progression

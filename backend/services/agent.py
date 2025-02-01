@@ -171,43 +171,44 @@ def format_chat_history(chat_history: List[Message]) -> str:
     return "\n".join(buffer)
 
 def check_greeting_and_customer(state: AgentState) -> AgentState:
-    """
-    Checks if the user's query is a greeting and responds immediately.
-
-    Additionally, if no customer is mentioned in the query, it determines (using an LLM)
-    if the user's query seems to expect customer-specific information. If so, it asks the user
-    to specify the customer name.
-    """
+    """Handles greetings, conversation flow, and customer detection."""
     if state.response:
         return state
+
+    # Increment conversation turns
+    state.conversation_turns += 1
 
     greetings = {
         'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning', r'good afternoon', r'good evening', r'how are you'],
         'response': [r'\bi\'m good\b', r'\bdoing great\b', r'\bnot bad\b', r'\bfine thanks\b', r'\bpretty good\b', r'\ball good\b']
     }
-    # Check for initial greetings with regex
+
     lower_question = state.question.lower()
-    if any(re.search(pattern, lower_question) for pattern in greetings['initial']):
+
+    # First turn: Initial greeting
+    if state.conversation_turns == 1 and any(re.search(pattern, lower_question) for pattern in greetings['initial']):
         _input = (
-            RunnableLambda(lambda x: f"Provide a friendly greeting response to: '{x.question}'")
-            | llm_4o  # Revert to original LLM
+            RunnableLambda(lambda x: f"Respond to the greeting by politely directing the user to state their specific document-related query: '{x.question}'")
+            | llm_4o
             | StrOutputParser()
         )
         state.response = _input.invoke(state)
         state.should_stop = True
         return state
 
-    # Check for follow-ups with exact matches
+    # Subsequent turns: Casual conversation
     if any(re.search(pattern, lower_question) for pattern in greetings['response']):
-        _input = (
-            RunnableLambda(lambda x: f"Acknowledge the response and offer help: '{x.question}'")
-            | llm_4o  # Original LLM for quality
-            | StrOutputParser()
+        state.response = (
+            "I appreciate your friendliness, but I'm an AI assistant focused on answering questions about specific documents. "
+            "Could you please ask a clear, document-related question? I'm here to help you find information efficiently."
         )
-        state.response = _input.invoke(state)
         state.should_stop = True
         return state
 
+    # Reset conversation turns if a substantive query is detected
+    state.conversation_turns = 0
+
+    # Continue with existing customer detection logic
     detected_customers = detect_customers(state.question)
     if not detected_customers:
         logger.info("No customer detected in the query.")
@@ -220,6 +221,7 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
         if customer_intent.strip().lower().startswith("yes"):
             state.response = "It seems you're asking for customer-specific information. Could you please specify the customer name?"
             return state
+
     return state
 
 def condense_question(state: AgentState) -> AgentState:
