@@ -231,38 +231,32 @@ def condense_question(state: AgentState) -> AgentState:
     return state
 
 def check_customer_specification(state: AgentState) -> AgentState:
-    """
-    Determines if query requires customer context using:
-    - Current condensed question
-    - Chat history analysis
-    """
-    # First check explicit customer mentions
+    # Add contact-specific detection
+    contact_keywords = ["contacts", "point of contact", "escalation list"]
+    if any(kw in state.question.lower() for kw in contact_keywords):
+        state.response = "Which customer's contacts are you requesting?"
+        state.should_stop = True
+        return state
+
+    # Existing detection logic
     detected_customers = detect_customers(state.question)
     if detected_customers:
         return state
 
-    # Then check chat history for customer context
-    chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
-    history_customers = detect_customers(chat_context)
-    if history_customers:
-        logger.info(f"Inferred customer from history: {history_customers}")
-        return state
-
-    # Final check with LLM if customer context is needed
-    prompt = f"""Analyze if this query requires customer-specific documents:
+    # Improved LLM prompt
+    prompt = f"""Determine if this query requires customer-specific context:
     Query: {state.question}
-    Chat History Context: {chat_context}
+    Document Types Available: 
+    - Customer-specific contacts
+    - General process documents
     
+    Should this query be routed to customer-specific documents? 
     Answer ONLY 'yes' or 'no'"""
     
-    customer_intent = (
-        RunnableLambda(lambda x: prompt)
-        | llm_4o_mini
-        | StrOutputParser()
-    ).invoke(state)
-
+    customer_intent = llm_4o_mini.invoke(prompt)
+    
     if customer_intent.strip().lower() == "yes":
-        state.response = "Please specify the customer name for this inquiry."
+        state.response = "Please specify the customer name for this request."
         state.should_stop = True
 
     return state
