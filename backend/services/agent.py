@@ -260,7 +260,7 @@ def check_customer_specification(state: AgentState) -> AgentState:
     customer_response = llm_4o_mini.invoke(prompt)
     customer_intent = customer_response.content.strip().lower()
     
-    if customer_intent == "yes":
+    if customer_intent.startswith("yes"):
         state.response = "Please specify which customer this request pertains to."
         state.should_stop = True
     
