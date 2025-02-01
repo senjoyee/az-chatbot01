@@ -1,12 +1,67 @@
-# (Imports remain unchanged)
+# services/agent.py
+
 import logging
 from typing import List, Dict, Any
 import torch
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-# ... existing imports ...
+from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langgraph.graph import StateGraph, END
+from langchain_openai import AzureChatOpenAI
+from langchain.prompts import PromptTemplate, ChatPromptTemplate
+from langchain.schema import StrOutputParser
+from langchain_core.documents import Document
+from .tools import RetrieverTool
 
-# NEW NODE: Handle Greetings
+from config.settings import (
+    AZURE_OPENAI_API_KEY,
+    AZURE_OPENAI_ENDPOINT
+)
+from config.azure_search import vector_store
+from models.schemas import Message, AgentState
+
+logger = logging.getLogger(__name__)
+
+# Initialize the tool
+retriever_tool = RetrieverTool()
+
+# Constants for reranking
+RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+# Initialize reranking model and tokenizer globally
+logger.info(f"Initializing reranking model: {RERANKER_MODEL_NAME}")
+reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_NAME)
+reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_NAME)
+
+# Initialize the language model
+llm_4o_mini = AzureChatOpenAI(
+    azure_deployment="gpt-4o-mini",
+    openai_api_version="2023-03-15-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_API_KEY,
+    temperature=0.3,
+    top_p=0.7
+)
+
+llm_4o = AzureChatOpenAI(
+    azure_deployment="gpt-4o",
+    openai_api_version="2024-08-01-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_API_KEY,
+    temperature=0.1,
+    top_p=0.9
+)
+
+# List of customer names for filtering
+CUSTOMER_NAMES = [
+    "bsw",
+    "tbs",
+    "npac",
+    "asahi",
+    # Add more customer names here
+]
+
 def handle_greetings(state: AgentState) -> AgentState:
     # If a response is already set, skip further processing.
     if state.response:
@@ -21,7 +76,7 @@ def handle_greetings(state: AgentState) -> AgentState:
         state.response = immediate_response.strip()
     return state
 
-# NEW NODE: Check if the question is customer-specific
+
 def check_customer_question(state: AgentState) -> AgentState:
     if state.response:
         return state
