@@ -52,11 +52,13 @@ export default function Chatbot() {
       },
       body: JSON.stringify({
         question: message,
-        conversation: conversation.map(msg => ({
-          role: msg.sender,
-          content: msg.text,
-          id: msg.id,
-        }))
+        conversation: {
+          conversation: conversation.map(msg => ({
+            role: msg.sender,
+            content: msg.text,
+            id: msg.id,
+          }))
+        }
       }),
       onmessage(event) {
         if (event.data) {
