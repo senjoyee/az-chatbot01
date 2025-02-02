@@ -124,39 +124,44 @@ async def ask_question(request: ConversationRequest) -> dict:
 async def ask_question_stream(request: ConversationRequest):
     async def event_generator():
         try:
-            logger.debug(f"New stream request for question: {request.question}")
-            logger.debug(f"Raw conversation input: {type(request.conversation.conversation)} - {repr(request.conversation.conversation)[:100]}")
+            question = request.question
+            # Extract conversation history from the request (assumed to be a list of Message objects)
+            chat_history = request.conversation.conversation
 
-            # Parse conversation history with validation
-            try:
-                chat_history = json.loads(request.conversation.conversation)
-                logger.debug(f"Parsed chat_history type: {type(chat_history)}")
-            except (json.JSONDecodeError, TypeError) as e:
-                logger.error(f"Invalid conversation format: {str(e)}")
-                yield json.dumps({"error": "Invalid conversation format - must be valid JSON"})
-                return
-
-            # Create AgentState with type validation
+            # Build an initial AgentState.
             state = AgentState(
-                question=request.question,
+                question=question,
                 chat_history=chat_history,
-                documents=None,
-                response="",
+                documents=None,   # To be set during document retrieval.
+                response="",      # Empty initial response.
                 conversation_turns=0
             )
-            logger.debug(f"AgentState created: {state}")
 
-            # Add type checking before .get() operations
-            async for event in workflow_chain.astream(state):
-                logger.debug(f"Generated event type: {type(event)}")
-                logger.debug(f"Event content: {repr(event)[:200]}")
-                yield str(event)
-                
+            # Manually run the pre-processing steps of the workflow:
+            state = check_greeting_and_customer(state)
+            if getattr(state, "should_stop", False):
+                yield state.response
+                return
+
+            state = condense_question(state)
+            state = check_customer_specification(state)
+            if getattr(state, "should_stop", False):
+                yield state.response
+                return
+
+            state = reason_about_query(state)
+            state = retrieve_documents(state)
+            state = rerank_documents(state)
+
+            # At this point the state is fully prepared.
+            # Now stream the generation of the answer token-by-token.
+            async for token in generate_response_stream(state):
+                yield token
+
         except Exception as e:
-            logger.exception(f"Stream error in ask_question_stream: {str(e)}")
-            yield json.dumps({"error": "Internal server error"})
+            yield f"\nError: {str(e)}"
 
-    return StreamingResponse(event_generator())
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.get("/listfiles")
 async def list_files(
