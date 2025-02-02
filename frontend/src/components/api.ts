@@ -1,3 +1,4 @@
+import { EventSourcePolyfill } from 'event-source-polyfill';
 const API_BASE_URL = 'https://jscbbackend01.azurewebsites.net';
 
 // Error handling utility
@@ -164,23 +165,27 @@ export interface Message {
 
 // Keep only the EventSource version and modify to:
 export const sendMessageStream = async (
-  question: string,
-  conversation: Message[]
+  message: string,
+  conversation: Message[],
+  token: string
 ): Promise<EventSourcePolyfill> => {
+  const formattedConversation = conversation.map(msg => ({
+    role: msg.isBot ? 'assistant' : 'user',
+    content: msg.content
+  }));
+
   return new EventSourcePolyfill(`${API_BASE_URL}/conversation/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${await getAccessTokenSilently()}`,
+      Authorization: `Bearer ${token}`
     },
     body: JSON.stringify({
-      question,
+      question: message,
       conversation: {
-        conversation: conversation.map(msg => ({
-          role: msg.isBot ? 'assistant' : 'user',
-          content: msg.content
-        }))
+        conversation: formattedConversation
       }
     }),
+    withCredentials: true
   });
 };
