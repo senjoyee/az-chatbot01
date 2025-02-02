@@ -7,7 +7,7 @@ from typing import List, Tuple, Optional, AsyncIterator
 import asyncio
 from langchain_core.callbacks import AsyncCallbackHandler
 
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
