@@ -150,7 +150,7 @@ async def ask_question_stream(request: ConversationRequest):
 
             state = condense_question(state)
             logger.debug(f"After condense_question: {state.__dict__}")
-            state = check_customer_specification(st
+            state = check_customer_specification(state)
             logger.debug(f"After check_customer_specification: {state.__dict__}")
             if getattr(state, "should_stop", False):
                 logger.info("Early exit after check_customer_specification.")
