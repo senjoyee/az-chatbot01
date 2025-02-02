@@ -182,12 +182,19 @@ def detect_customers(query: str) -> List[str]:
 
 def check_greeting_and_customer(state: AgentState) -> AgentState:
     """Handles greetings and conversation flow management."""
+    logger.debug(f"Entering check_greeting_and_customer with question: {state.question}")
+    logger.debug(f"Chat history type: {type(state.chat_history)}")
+    if state.chat_history:
+        logger.debug(f"First message type: {type(state.chat_history[0]) if state.chat_history else 'No messages'}")
+        logger.debug(f"Chat history sample: {str(state.chat_history)[:200]}")
+    
     if state.response:
+        logger.debug("State already has response, returning early")
         return state
 
     state.conversation_turns += 1
     lower_question = state.question.lower()
-
+    logger.debug(f"Processing turn {state.conversation_turns} with lower_question: {lower_question}")
     # Greeting pattern definitions
     greeting_patterns = {
         'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning', 
@@ -223,75 +230,96 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
     return state
 
 def condense_question(state: AgentState) -> AgentState:
-    logger.info(f"Condensing question with state: {state}")
-    if not state.chat_history:  # Empty history
-        return state
-
-    _input = (
-        RunnableLambda(lambda x: {
-            "chat_history": format_chat_history(x.chat_history),
-            "question": x.question
-        })
-        | CONDENSE_QUESTION_PROMPT
-        | llm_4o_mini
-        | StrOutputParser()
-    )
-    result = _input.invoke(state)
-    state.question = result
+    """Condenses the conversation history and current question."""
+    logger.debug(f"Entering condense_question with state: {state.__dict__}")
+    logger.debug(f"Chat history format: {format_chat_history(state.chat_history)[:200]}")
+    
+    try:
+        _input = (
+            RunnableLambda(lambda x: {
+                "chat_history": format_chat_history(x.chat_history),
+                "question": x.question
+            })
+            | CONDENSE_QUESTION_PROMPT
+            | llm_4o_mini
+            | StrOutputParser()
+        )
+        result = _input.invoke(state)
+        state.question = result
+        logger.debug(f"Condensed question result: {state.question}")
+    except Exception as e:
+        logger.exception("Error in condense_question")
+        raise
     return state
 
 def check_customer_specification(state: AgentState) -> AgentState:
-    # 1. Check for explicit customer mentions
-    if detected := detect_customers(state.question):
-        logger.info(f"Detected customers: {detected}")
-        return state
+    """Checks for customer specifications in the query."""
+    logger.debug(f"Entering check_customer_specification with question: {state.question}")
     
-    # 2. Check chat history (last 3 messages)
-    chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
-    if history_customers := detect_customers(chat_context):
-        logger.info(f"Using historical customer context: {history_customers}")
-        state.customer = history_customers[0]  # Take first match
-        return state
-    
-    # 3. Check for contact/keyword triggers
-    contact_triggers = {"contacts", "point of contact", "escalation"}
-    if any(trigger in state.question.lower() for trigger in contact_triggers):
-        state.response = "Which customer's contact information are you requesting?"
-        state.should_stop = True
-        return state
-    
-    # 4. Final LLM verification
-    prompt = f"""Should this query be handled with customer-specific documents?
-    Query: {state.question}
-    Chat History: {chat_context}
-    
-    Answer ONLY yes/no:"""
+    try:
+        # 1. Check for explicit customer mentions
+        if detected := detect_customers(state.question):
+            logger.info(f"Detected customers: {detected}")
+            return state
+        
+        # 2. Check chat history (last 3 messages)
+        chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
+        if history_customers := detect_customers(chat_context):
+            logger.info(f"Using historical customer context: {history_customers}")
+            state.customer = history_customers[0]  # Take first match
+            return state
+        
+        # 3. Check for contact/keyword triggers
+        contact_triggers = {"contacts", "point of contact", "escalation"}
+        if any(trigger in state.question.lower() for trigger in contact_triggers):
+            state.response = "Which customer's contact information are you requesting?"
+            state.should_stop = True
+            return state
+        
+        # 4. Final LLM verification
+        prompt = f"""Should this query be handled with customer-specific documents?
+        Query: {state.question}
+        Chat History: {chat_context}
+        
+        Answer ONLY yes/no:"""
 
-    customer_response = llm_4o_mini.invoke(prompt)
-    customer_intent = customer_response.content.strip().lower()
-    
-    if customer_intent.startswith("yes"):
-        state.response = "Please specify which customer this request pertains to."
-        state.should_stop = True
-    
+        customer_response = llm_4o_mini.invoke(prompt)
+        customer_intent = customer_response.content.strip().lower()
+        
+        if customer_intent.startswith("yes"):
+            state.response = "Please specify which customer this request pertains to."
+            state.should_stop = True
+        
+        logger.debug(f"Detected customers: {detected}, use_and: {False}")
+    except Exception as e:
+        logger.exception("Error in check_customer_specification")
+        raise
     return state
 
 def reason_about_query(state: AgentState) -> AgentState:
-    logger.info(f"Reasoning about query with state: {state}")
-    _input = (
-        RunnableLambda(lambda x: {"question": x.question})
-        | QUERY_REASONING_PROMPT
-        | llm_4o_mini
-        | StrOutputParser()
-    )
-    rewritten_query = _input.invoke(state)
-    state.original_question = state.question  # Keep the original question
-    state.question = rewritten_query
-    logger.info(f"Rewritten query: {rewritten_query}")
+    """Reasons about the query to improve retrieval."""
+    logger.debug(f"Entering reason_about_query with question: {state.question}")
+    
+    try:
+        _input = (
+            RunnableLambda(lambda x: {"question": x.question})
+            | QUERY_REASONING_PROMPT
+            | llm_4o_mini
+            | StrOutputParser()
+        )
+        rewritten_query = _input.invoke(state)
+        state.original_question = state.question  # Keep the original question
+        state.question = rewritten_query
+        logger.debug(f"Reasoned query: {state.question}")
+    except Exception as e:
+        logger.exception("Error in reason_about_query")
+        raise
     return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
-    logger.info(f"Retrieving documents for question: {state.question}")
+    """Retrieves relevant documents."""
+    logger.debug(f"Entering retrieve_documents with question: {state.question}")
+    
     try:
         # Detect customers and operator type in the query
         detected_customers, use_and_operator = detect_customers_and_operator(state.question)
@@ -308,75 +336,94 @@ def retrieve_documents(state: AgentState) -> AgentState:
             "k": 10,
             "filters": filters
         })
-        logger.info(f"Retrieved {len(state.documents)} documents")
+        logger.debug(f"Retrieved documents count: {len(state.documents) if state.documents else 0}")
+        if state.documents:
+            logger.debug(f"First document sample: {str(state.documents[0])[:200]}")
     except Exception as e:
-        logger.error(f"Error retrieving documents: {str(e)}")
-        state.documents = []  # Ensure we have a valid state even on failure
+        logger.exception("Error in retrieve_documents")
+        raise
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
-    logger.info("Reranking documents")
+    """Reranks retrieved documents."""
+    logger.debug(f"Entering rerank_documents")
+    logger.debug(f"Documents before reranking: {len(state.documents) if state.documents else 0}")
+    
+    try:
+        query = state.question
+        documents = state.documents
 
-    query = state.question
-    documents = state.documents
+        text_pairs = [(query, doc.page_content) for doc in documents]
+        inputs = reranker_tokenizer.batch_encode_plus(
+            text_pairs,
+            padding=True,
+            truncation=True,
+            return_tensors="pt",
+            max_length=512
+        )
 
-    text_pairs = [(query, doc.page_content) for doc in documents]
-    inputs = reranker_tokenizer.batch_encode_plus(
-        text_pairs,
-        padding=True,
-        truncation=True,
-        return_tensors="pt",
-        max_length=512
-    )
+        with torch.no_grad():
+            scores = reranker_model(**inputs).logits.squeeze()
 
-    with torch.no_grad():
-        scores = reranker_model(**inputs).logits.squeeze()
+        if torch.is_tensor(scores):
+            scores = scores.tolist()
 
-    if torch.is_tensor(scores):
-        scores = scores.tolist()
-
-    scored_docs = list(zip(documents, scores))
-    scored_docs.sort(key=lambda x: x[1], reverse=True)
-    state.documents = [doc for doc, _ in scored_docs]
+        scored_docs = list(zip(documents, scores))
+        scored_docs.sort(key=lambda x: x[1], reverse=True)
+        state.documents = [doc for doc, _ in scored_docs]
+        logger.debug(f"Documents after reranking: {len(state.documents) if state.documents else 0}")
+    except Exception as e:
+        logger.exception("Error in rerank_documents")
+        raise
     return state
 
-
 async def generate_response_stream(state: AgentState) -> AsyncIterator[str]:
-    if not state.documents:
-        yield "I couldn't find any relevant information to answer your question."
-        return
+    """Generates streaming response."""
+    logger.debug(f"Entering generate_response_stream")
+    logger.debug(f"Final question: {state.question}")
+    logger.debug(f"Documents for response: {len(state.documents) if state.documents else 0}")
+    
+    try:
+        if not state.documents:
+            yield "I couldn't find any relevant information to answer your question."
+            return
 
-    TOP_K_DOCUMENTS = 3
-    top_documents = state.documents[:TOP_K_DOCUMENTS]
-    context = "\n\n".join(doc.page_content for doc in top_documents)
+        TOP_K_DOCUMENTS = 3
+        top_documents = state.documents[:TOP_K_DOCUMENTS]
+        context = "\n\n".join(doc.page_content for doc in top_documents)
 
-    # Prepare the prompt (similar to your ANSWER_PROMPT) for streaming.
-    answer_chain = (
-        RunnablePassthrough.assign(context=lambda x: context)
-        | ANSWER_PROMPT
-        | llm_4o
-        | StrOutputParser()
-    )
+        # Prepare the prompt (similar to your ANSWER_PROMPT) for streaming.
+        answer_chain = (
+            RunnablePassthrough.assign(context=lambda x: context)
+            | ANSWER_PROMPT
+            | llm_4o
+            | StrOutputParser()
+        )
 
-    # Create an instance of your token callback handler.
-    token_handler = TokenStreamHandler()
+        # Create an instance of your token callback handler.
+        token_handler = TokenStreamHandler()
 
-    stream = answer_chain.astream(
-        {"question": state.question}, 
-        config={"callbacks": [token_handler]}
-    )
+        stream = answer_chain.astream(
+            {"question": state.question}, 
+            config={"callbacks": [token_handler]}
+        )
 
-    # As tokens arrive, yield them immediately.
-    final_response = ""
-    async for token_info in stream:
-        # token_info is assumed to be a dict with key "token"; adjust if necessary.
-        token = token_info.get("token", "")
-        final_response += token
-        yield token
+        # As tokens arrive, yield them immediately.
+        final_response = ""
+        async for token_info in stream:
+            # token_info is assumed to be a dict with key "token"; adjust if necessary.
+            token = token_info.get("token", "")
+            final_response += token
+            yield token
 
-    # At the end, update the state (if you want to keep the final response in the agent state).
-    state.response = final_response
+        # At the end, update the state (if you want to keep the final response in the agent state).
+        state.response = final_response
+        logger.debug("Starting response generation stream")
+    except Exception as e:
+        logger.exception("Error in generate_response_stream")
+        raise
 
 async def generate_response_stream_sse(state: AgentState) -> AsyncIterator[str]:
+    """Generates streaming response in Server-Sent Events format."""
     async for token in generate_response_stream(state):
         yield f"data: {token}\n\n"
