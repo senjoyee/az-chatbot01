@@ -361,7 +361,7 @@ async def generate_response_stream(state: AgentState) -> AsyncIterator[str]:
 
     # Here we assume that llm_4o has a method "stream_chat" that returns an async iterator of tokens.
     # (The exact API may differ; consult your LLM documentation if needed.)
-    stream = llm_4o.stream_chat(prompt_data, callbacks=[token_handler])
+    stream = llm_4o.astream(prompt_data, callbacks=[token_handler])
 
     # As tokens arrive, yield them immediately.
     final_response = ""
