@@ -125,8 +125,10 @@ async def ask_question_stream(request: ConversationRequest):
     async def event_generator():
         try:
             question = request.question
+            logger.info(f"Received question: {question}")
             # Extract conversation history from the request (assumed to be a list of Message objects)
             chat_history = request.conversation.conversation
+            logger.debug(f"Conversation input type: {type(chat_history)}, sample: {str(chat_history)[:100]}")
 
             # Build an initial AgentState.
             state = AgentState(
@@ -136,29 +138,41 @@ async def ask_question_stream(request: ConversationRequest):
                 response="",      # Empty initial response.
                 conversation_turns=0
             )
+            logger.debug(f"Initial AgentState created: {state.__dict__}")
 
             # Manually run the pre-processing steps of the workflow:
             state = check_greeting_and_customer(state)
+            logger.debug(f"After check_greeting_and_customer: {state.__dict__}")
             if getattr(state, "should_stop", False):
+                logger.info("Early exit after check_greeting_and_customer.")
                 yield state.response
                 return
 
             state = condense_question(state)
-            state = check_customer_specification(state)
+            logger.debug(f"After condense_question: {state.__dict__}")
+            state = check_customer_specification(st
+            logger.debug(f"After check_customer_specification: {state.__dict__}")
             if getattr(state, "should_stop", False):
+                logger.info("Early exit after check_customer_specification.")
                 yield state.response
                 return
 
             state = reason_about_query(state)
+            logger.debug(f"After reason_about_query: {state.__dict__}")
             state = retrieve_documents(state)
+            logger.debug(f"After retrieve_documents: {state.__dict__}")
             state = rerank_documents(state)
+            logger.debug(f"After rerank_documents: {state.__dict__}")
 
             # At this point the state is fully prepared.
+            logger.info("Starting token generation...")
             # Now stream the generation of the answer token-by-token.
             async for token in generate_response_stream(state):
+                logger.debug(f"Yielding token: {token}")
                 yield token
 
         except Exception as e:
+            logger.exception(f"Stream error in ask_question_stream: {str(e)}")
             yield f"\nError: {str(e)}"
 
     return StreamingResponse(event_generator(), media_type="text/event-stream")
