@@ -351,17 +351,20 @@ async def generate_response_stream(state: AgentState) -> AsyncIterator[str]:
     context = "\n\n".join(doc.page_content for doc in top_documents)
 
     # Prepare the prompt (similar to your ANSWER_PROMPT) for streaming.
-    prompt_data = {
-        "context": context,
-        "question": state.question
-    }
+    answer_chain = (
+        RunnablePassthrough.assign(context=lambda x: context)
+        | ANSWER_PROMPT
+        | llm_4o
+        | StrOutputParser()
+    )
 
     # Create an instance of your token callback handler.
     token_handler = TokenStreamHandler()
 
-    # Here we assume that llm_4o has a method "stream_chat" that returns an async iterator of tokens.
-    # (The exact API may differ; consult your LLM documentation if needed.)
-    stream = llm_4o.astream(prompt_data, callbacks=[token_handler])
+    stream = answer_chain.astream(
+        {"question": state.question}, 
+        config={"callbacks": [token_handler]}
+    )
 
     # As tokens arrive, yield them immediately.
     final_response = ""
