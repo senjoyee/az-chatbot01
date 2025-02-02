@@ -156,42 +156,31 @@ export const getDocumentContent = async (filename: string) => {
 };
 
 export interface Message {
-  sender: 'user' | 'assistant';
-  text: string;
+  content: string;
+  isBot: boolean;
+  isStreaming?: boolean;
+  error?: boolean;
 }
 
-export const sendMessage = async (
+// Keep only the EventSource version and modify to:
+export const sendMessageStream = async (
   question: string,
   conversation: Message[]
-) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/conversation`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        question: question,
-        conversation: {
-          conversation: conversation.map(msg => ({
-            role: msg.sender === 'user' ? 'user' : 'assistant',
-            content: msg.text
-          }))
-        }
-      }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Error: ${response.status} - ${errorText}`);
-    }
-
-    const data = await response.json();
-    return data.answer;
-  } catch (error) {
-    handleApiError(error, 'message sending');
-    throw error;
-  }
+): Promise<EventSourcePolyfill> => {
+  return new EventSourcePolyfill(`${API_BASE_URL}/conversation/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${await getAccessTokenSilently()}`,
+    },
+    body: JSON.stringify({
+      question,
+      conversation: {
+        conversation: conversation.map(msg => ({
+          role: msg.isBot ? 'assistant' : 'user',
+          content: msg.content
+        }))
+      }
+    }),
+  });
 };
-

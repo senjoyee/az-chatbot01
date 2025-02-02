@@ -15,6 +15,8 @@ interface Message {
   sender: 'user' | 'assistant'  
 }  
 
+const API_BASE_URL = 'https://jscbbackend01.azurewebsites.net';
+
 export default function Component() {  
   const [messages, setMessages] = useState<Message[]>([  
     { id: 1, text: "Hello! How can I assist you today?", sender: 'assistant' }  
@@ -30,63 +32,66 @@ export default function Component() {
     }  
   }, [messages])  
 
-  const handleSend = async () => {  
-    if (!input.trim() || loading) return  
+  const askQuestionStream = async (message: string, conversation: Message[]) => {
+    const eventSource = new EventSource(`${API_BASE_URL}/conversation/stream`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: message,
+        conversation: conversation.map(msg => ({
+          role: msg.sender,
+          content: msg.text,
+          id: msg.id
+        }))
+      }),
+    });
 
-    const userMessage = {   
-      id: messages.length + 1,   
-      text: input.trim(),   
-      sender: 'user' as const  
-    }  
+    return eventSource;
+  };
 
-    setMessages(prev => [...prev, userMessage])  
-    setInput('')  
-    setLoading(true)  
-    setError(null)  
+  const handleSend = async () => {
+    if (!input.trim() || loading) return;
+    setLoading(true);
+    try {
+      // Add temporary streaming message
+      setMessages(prev => [...prev, { 
+        id: messages.length + 1,
+        text: "",
+        sender: 'assistant' as const,
+        isStreaming: true
+      }]);
 
-    try {  
-      const response = await fetch('https://jscbbackend01.azurewebsites.net/conversation', {  
-        method: 'POST',  
-        headers: {  
-          'Content-Type': 'application/json',  
-        },  
-        body: JSON.stringify({  
-          question: userMessage.text,  
-          conversation: {  
-            conversation: messages.map(msg => ({  
-              role: msg.sender,  
-              content: msg.text,  
-              id: msg.id  
-            }))  
-          }  
-        }),  
-      })  
+      const eventSource = await askQuestionStream(input.trim(), messages);
+      
+      eventSource.onmessage = (event) => {
+        setMessages(prev => {
+          const last = prev[prev.length-1];
+          return [
+            ...prev.slice(0, -1),
+            { ...last, text: last.text + event.data }
+          ];
+        });
+      };
 
-      if (!response.ok) {  
-        const errorText = await response.text();  
-        throw new Error(`Error: ${response.status} - ${errorText}`);  
-      }  
-
-      const data = await response.json()  
-
-      if (!data.answer) {  
-        throw new Error('Invalid response format')  
-      }  
-
-      const botResponse = {   
-        id: messages.length + 2,   
-        text: data.answer,  
-        sender: 'assistant' as const  
-      }  
-
-      setMessages(prev => [...prev, botResponse])  
-    } catch (error) {  
-      console.error('Chat error:', error)  
-      setError(error instanceof Error ? error.message : 'Failed to send message')  
-    } finally {  
-      setLoading(false)  
-    }  
-  }  
+      eventSource.onerror = () => {
+        eventSource.close();
+        setMessages(prev => [
+          ...prev.slice(0, -1),
+          { ...prev[prev.length-1], isStreaming: false, error: true }
+        ]);
+      };
+    } catch (error) {{
+      setMessages(prev => [
+        ...prev.slice(0, -1),
+        { ...prev[prev.length-1], text: 'Error: ' + (error as Error).message, isStreaming: false, error: true }
+      ]);
+    }} finally {
+      setLoading(false);
+    }
+  };  
 
   return (  
     <div className="flex h-screen items-center justify-center bg-gradient-to-br from-gray-100 to-gray-200 p-4">  

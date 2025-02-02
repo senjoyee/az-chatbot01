@@ -1,26 +1,24 @@
 # backend/services/agent.py
 
 import logging
-from typing import List, Dict, Any
 import torch
 import re
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
-from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
-from langgraph.graph import StateGraph, END
+from langchain_core.runnables import RunnableLambda
 from langchain_openai import AzureChatOpenAI
-from langchain.prompts import PromptTemplate, ChatPromptTemplate
+from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
-from langchain_core.documents import Document
 from .tools import RetrieverTool
+import asyncio
+from langchain.callbacks.base import AsyncCallbackHandler
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
     AZURE_OPENAI_ENDPOINT
 )
-from config.azure_search import vector_store
-from models.schemas import Message, AgentState
+
+from models.schemas import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -51,8 +49,19 @@ llm_4o = AzureChatOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
     api_key=AZURE_OPENAI_API_KEY,
     temperature=0.1,
-    top_p=0.9
+    top_p=0.9,
+    streaming=True
 )
+
+# Define a callback handler for async LLM calls
+
+class TokenStreamHandler(AsyncCallbackHandler):
+    def __init__(self):
+        self.queue = asyncio.Queue()
+
+    async def on_llm_new_token(self, token: str, **kwargs) -> None:
+        # Push each new token into the async queue
+        await self.queue.put(token)
 
 # List of customer names for filtering
 CUSTOMER_NAMES = [
@@ -63,29 +72,6 @@ CUSTOMER_NAMES = [
     # Add more customer names here
 ]
 
-def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
-    """
-    Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
-    Returns a tuple of (detected_customers, use_and_operator).
-    """
-    query_lower = query.lower()
-    detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
-    # Check if query implies ALL customers should be included
-    use_and = False
-    if len(detected) > 1:  # Only check for AND if multiple customers detected
-        and_indicators = ['&', ' and ', ' both ', ' all ']
-        use_and = any(indicator in query_lower for indicator in and_indicators)
-
-    return detected, use_and
-
-def detect_customers(query: str) -> List[str]:
-    """
-    Detect customer names in the query string.
-    Returns a list of detected customer names (case-insensitive).
-    """
-    query_lower = query.lower()
-    return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
 # Prompt templates
 
@@ -160,15 +146,29 @@ Remember, your goal is to provide accurate, helpful information based on the doc
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
-def format_chat_history(chat_history: List[Message]) -> str:
-    """Format chat history for the model."""
-    buffer = []
-    for message in chat_history:
-        if message.role == "user":
-            buffer.append(f"Human: {message.content}")
-        elif message.role == "assistant":
-            buffer.append(f"Assistant: {message.content}")
-    return "\n".join(buffer)
+def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
+    """
+    Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
+    Returns a tuple of (detected_customers, use_and_operator).
+    """
+    query_lower = query.lower()
+    detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
+
+    # Check if query implies ALL customers should be included
+    use_and = False
+    if len(detected) > 1:  # Only check for AND if multiple customers detected
+        and_indicators = ['&', ' and ', ' both ', ' all ']
+        use_and = any(indicator in query_lower for indicator in and_indicators)
+
+    return detected, use_and
+
+def detect_customers(query: str) -> List[str]:
+    """
+    Detect customer names in the query string.
+    Returns a list of detected customer names (case-insensitive).
+    """
+    query_lower = query.lower()
+    return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
 def check_greeting_and_customer(state: AgentState) -> AgentState:
     """Handles greetings and conversation flow management."""
@@ -330,92 +330,40 @@ def rerank_documents(state: AgentState) -> AgentState:
     state.documents = [doc for doc, _ in scored_docs]
     return state
 
-def generate_response(state: AgentState) -> AgentState:
-    logger.info("Generating response")
 
+async def generate_response_stream(state: AgentState) -> AsyncIterator[str]:
     if not state.documents:
-        state.response = "I couldn't find any relevant information to answer your question."
-        return state
+        yield "I couldn't find any relevant information to answer your question."
+        return
 
     TOP_K_DOCUMENTS = 3
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
-    logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
 
-    _input = (
-        RunnableLambda(lambda x: {
-            "context": context,
-            "question": x.question
-        })
-        | ANSWER_PROMPT
-        | llm_4o
-        | StrOutputParser()
-    )
-
-    response = _input.invoke(state)
-    response = response.replace("<answer>", "").replace("</answer>", "").strip()
-    state.response = response
-    return state
-
-def update_history(state: AgentState) -> AgentState:
-    logger.info(f"Updating history with state: {state}")
-    if not state.chat_history:
-        state.chat_history = []
-    state.chat_history.extend([
-        Message(role="user", content=state.question),
-        Message(role="assistant", content=state.response)
-    ])
-    return state
-
-# Build the Langgraph
-builder = StateGraph(AgentState)
-
-# Nodes
-builder.add_node("check_initial", check_greeting_and_customer)
-builder.add_node("condense", condense_question)
-builder.add_node("check_customer", check_customer_specification)  # New node
-builder.add_node("reason", reason_about_query)
-builder.add_node("retrieve", retrieve_documents)
-builder.add_node("rerank", rerank_documents)
-builder.add_node("generate", generate_response)
-builder.add_node("update_history", update_history)
-
-# Edges
-builder.add_conditional_edges(
-    "check_initial",
-    lambda s: END if s.should_stop else "condense"
-)
-builder.add_edge("condense", "check_customer")
-builder.add_conditional_edges(
-    "check_customer",
-    lambda s: END if s.should_stop else "reason"
-)
-builder.add_edge("reason", "retrieve")
-builder.add_edge("retrieve", "rerank")
-builder.add_edge("rerank", "generate")
-builder.add_edge("generate", "update_history")
-builder.add_edge("update_history", END)
-
-# Set entry point
-builder.set_entry_point("check_initial")
-
-# Compile the graph
-agent = builder.compile()
-
-async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
-    """Runs the Langgraph agent."""
-    inputs = {
-        "question": question,
-        "chat_history": chat_history,
-        "documents": None,
-        "response": None
+    # Prepare the prompt (similar to your ANSWER_PROMPT) for streaming.
+    prompt_data = {
+        "context": context,
+        "question": state.question
     }
-    try:
-        result = await agent.ainvoke(inputs)
-        return {
-            "response": result["response"],
-            "chat_history": result["chat_history"]
-        }
-    except Exception as e:
-        logger.error(f"Agent execution error: {str(e)}")
-        return {"response": "An error occurred while processing your request.", "chat_history": chat_history}
+
+    # Create an instance of your token callback handler.
+    token_handler = TokenStreamHandler()
+
+    # Here we assume that llm_4o has a method "stream_chat" that returns an async iterator of tokens.
+    # (The exact API may differ; consult your LLM documentation if needed.)
+    stream = llm_4o.stream_chat(prompt_data, callbacks=[token_handler])
+
+    # As tokens arrive, yield them immediately.
+    final_response = ""
+    async for token_info in stream:
+        # token_info is assumed to be a dict with key "token"; adjust if necessary.
+        token = token_info.get("token", "")
+        final_response += token
+        yield token
+
+    # At the end, update the state (if you want to keep the final response in the agent state).
+    state.response = final_response
+
+async def generate_response_stream_sse(state: AgentState) -> AsyncIterator[str]:
+    async for token in generate_response_stream(state):
+        yield f"data: {token}\n\n"

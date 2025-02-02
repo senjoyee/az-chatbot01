@@ -2,11 +2,13 @@ import os
 from typing import List, Optional
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from azure.storage.blob import BlobServiceClient
 from unstructured.partition.docx import partition_docx
 from unstructured.partition.pdf import partition_pdf
 from unstructured.chunking.title import chunk_by_title
 import json
+import asyncio
 from datetime import datetime
 
 # Import utility functions
@@ -14,11 +16,20 @@ from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_meta
 from config.logging_config import setup_logging
 from config.settings import (BLOB_CONN_STRING, BLOB_CONTAINER)
 from config.azure_search import search_client, embeddings
-from models.schemas import ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
+from models.schemas import ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus, AgentState, Message
 from models.enums import ProcessingStatus
 from services.agent import run_agent
 from services.contextualizer import Contextualizer
 from azure_storage import AzureStorageManager
+from services.agent import (
+    check_greeting_and_customer,
+    condense_question,
+    check_customer_specification,
+    reason_about_query,
+    retrieve_documents,
+    rerank_documents,
+    generate_response_stream  # new streaming function
+)
 
 # Setup logging using the configuration module
 logger = setup_logging()
@@ -108,7 +119,50 @@ async def ask_question(request: ConversationRequest) -> dict:
     except Exception as e:
         logger.error(f"Conversation error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+        
 
+@app.post("/conversation/stream")
+async def ask_question_stream(request: ConversationRequest):
+    async def event_generator():
+        try:
+            question = request.question
+            # Extract conversation history from the request (assumed to be a list of Message objects)
+            chat_history = request.conversation.conversation
+
+            # Build an initial AgentState.
+            state = AgentState(
+                question=question,
+                chat_history=chat_history,
+                documents=None,   # To be set during document retrieval.
+                response="",      # Empty initial response.
+                conversation_turns=0
+            )
+
+            # Manually run the pre-processing steps of the workflow:
+            state = check_greeting_and_customer(state)
+            if getattr(state, "should_stop", False):
+                yield state.response
+                return
+
+            state = condense_question(state)
+            state = check_customer_specification(state)
+            if getattr(state, "should_stop", False):
+                yield state.response
+                return
+
+            state = reason_about_query(state)
+            state = retrieve_documents(state)
+            state = rerank_documents(state)
+
+            # At this point the state is fully prepared.
+            # Now stream the generation of the answer token-by-token.
+            async for token in generate_response_stream(state):
+                yield token
+
+        except Exception as e:
+            yield f"\nError: {str(e)}"
+
+    return StreamingResponse(event_generator(), media_type="text/event-stream")
 
 @app.get("/listfiles")
 async def list_files(
