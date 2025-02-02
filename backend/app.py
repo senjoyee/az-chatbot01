@@ -120,7 +120,7 @@ async def ask_question(request: ConversationRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(e))
         
 
-@app.post("/conversation/stream")
+@app.get("/conversation/stream")
 async def ask_question_stream(request: ConversationRequest):
     async def event_generator():
         try:
