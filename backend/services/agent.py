@@ -1,6 +1,5 @@
-# backend/services/agent.py
-
 import logging
+from typing import List, Dict, Any
 import torch
 import re
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -9,17 +8,14 @@ from langchain_core.runnables import RunnableLambda
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
-from typing import List, Tuple, Optional, AsyncIterator
 from .tools import RetrieverTool
-import asyncio
-from langchain.callbacks.base import AsyncCallbackHandler
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
     AZURE_OPENAI_ENDPOINT
 )
 
-from models.schemas import AgentState
+from models.schemas import Message, AgentState
 
 logger = logging.getLogger(__name__)
 
