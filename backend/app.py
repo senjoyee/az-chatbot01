@@ -18,7 +18,6 @@ from config.settings import (BLOB_CONN_STRING, BLOB_CONTAINER)
 from config.azure_search import search_client, embeddings
 from models.schemas import ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus, AgentState, Message
 from models.enums import ProcessingStatus
-from services.agent import run_agent
 from services.contextualizer import Contextualizer
 from azure_storage import AzureStorageManager
 from services.agent import (
