@@ -147,6 +147,16 @@ Remember, your goal is to provide accurate, helpful information based on the doc
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
+def format_chat_history(chat_history: List[Message]) -> str:
+    """Format chat history for the model."""
+    buffer = []
+    for message in chat_history:
+        if message.role == "user":
+            buffer.append(f"Human: {message.content}")
+        elif message.role == "assistant":
+            buffer.append(f"Assistant: {message.content}")
+    return "\n".join(buffer)
+
 def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
     """
     Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
