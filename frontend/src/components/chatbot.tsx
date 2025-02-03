@@ -8,6 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkBreaks from 'remark-breaks';
 import { fetchEventSource } from '@microsoft/fetch-event-source';
 
 interface Message {
@@ -176,6 +178,7 @@ export default function Chatbot() {
                   }`}
                 >
                   <ReactMarkdown
+                    remarkPlugins={[remarkGfm, remarkBreaks]}
                     className="font-mono text-sm whitespace-pre-wrap break-words [&>*]:leading-tight [&>p]:my-0.5 last:[&>p]:mb-0 first:[&>p]:mt-0"
                     components={{
                       code: ({ node, inline, className, children, ...props }) => (
