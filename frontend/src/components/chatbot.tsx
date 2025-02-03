@@ -37,10 +37,6 @@ export default function Chatbot() {
     }
   }, [messages]);
 
-  /**
-   * askQuestionStream sends a POST request using fetchEventSource so that the response
-   * gets streamed back. It calls onMessage for each data chunk and onError if an error occurs.
-   */
   const askQuestionStream = async (
     message: string,
     conversation: Message[],
@@ -78,14 +74,12 @@ export default function Chatbot() {
     if (!input.trim() || loading) return;
     setLoading(true);
 
-    // Create a user's message.
     const userMessage: Message = {
       id: messages.length + 1,
       text: input.trim(),
       sender: 'user'
     };
 
-    // Create a temporary assistant message that will be updated as data streams in.
     const assistantMessage: Message = {
       id: messages.length + 2,
       text: "",
@@ -93,15 +87,13 @@ export default function Chatbot() {
       isStreaming: true,
     };
 
-    // Update messages with the new user message and the temporary streaming assistant message.
     setMessages(prev => [...prev, userMessage, assistantMessage]);
 
     try {
       await askQuestionStream(
         input.trim(),
-        [...messages, userMessage], // include the latest user message in the conversation
+        [...messages, userMessage],
         (data: string) => {
-          // Append each chunk of streamed data to the last (assistant) message.
           setMessages(prev => {
             const updated = [...prev];
             const lastMessage = updated[updated.length - 1];
@@ -113,7 +105,6 @@ export default function Chatbot() {
           });
         },
         (err: any) => {
-          // On error, mark the last message with error info.
           setMessages(prev => {
             const updated = [...prev];
             const lastMessage = updated[updated.length - 1];
