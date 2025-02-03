@@ -169,7 +169,7 @@ async def ask_question_stream(request: ConversationRequest):
             # Now stream the generation of the answer token-by-token.
             async for token in generate_response_stream(state):
                 logger.debug(f"Yielding token: {token}")
-                yield f"data: {token}\n\n"
+                yield f"data: {token}"
 
         except Exception as e:
             logger.exception(f"Stream error in ask_question_stream: {str(e)}")
