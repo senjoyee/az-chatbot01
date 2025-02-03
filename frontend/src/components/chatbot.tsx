@@ -168,37 +168,9 @@ export default function Chatbot() {
                       : 'bg-gray-100 text-gray-800 rounded-bl-none'
                   }`}
                 >
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm, remarkBreaks]}
-                    className="font-mono text-sm whitespace-pre-wrap break-words [&>*]:leading-tight [&>p]:my-0.5 last:[&>p]:mb-0 first:[&>p]:mt-0"
-                    components={{
-                      code: ({ node, inline, className, children, ...props }) => (
-                        <code
-                          className={`${
-                            inline
-                              ? 'bg-gray-200 px-1 rounded'
-                              : 'block bg-gray-800 text-white p-2 rounded my-1'
-                          } ${className}`}
-                          {...props}
-                        >
-                          {children}
-                        </code>
-                      ),
-                      p: ({ children }) => (
-                        <p className="whitespace-pre-wrap break-words leading-5">
-                          {children}
-                        </p>
-                      ),
-                      h1: ({ children }) => (
-                        <h1 className="text-base font-bold my-1">{children}</h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className="text-base font-semibold my-1">{children}</h2>
-                      ),
-                    }}
-                  >
+                  <pre className="font-mono text-sm whitespace-pre-wrap break-words m-0">
                     {message.text}
-                  </ReactMarkdown>
+                  </pre>
                 </div>
                 {message.sender === 'user' && (
                   <Avatar className="h-8 w-8 ml-2">
