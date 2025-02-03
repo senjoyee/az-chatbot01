@@ -411,9 +411,9 @@ async def generate_response_stream(state: AgentState) -> AsyncIterator[str]:
         # As tokens arrive, yield them immediately.
         final_response = ""
         try:
-            async for token_info in stream:
-                final_response += token_info.get("token", "")
-                yield token_info.get("token", "")
+            async for token in stream:
+                final_response += token
+                yield token
         except GeneratorExit:
             logger.info("Stream generator exited by client (GeneratorExit)")
             raise
