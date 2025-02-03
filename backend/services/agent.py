@@ -140,7 +140,7 @@ When formulating your answer, keep the following in mind:
 - If discussing technical procedures or contract terms, be precise and accurate.
 - Maintain a professional and helpful tone throughout your response.
 
-Provide your answer without any XML or HTML tags. If you need to ask for clarification, do so before providing your answer. If you're unsure about any part of your response, indicate this clearly to the user.
+Please provide your answer in clear, structured Markdown format. Use proper line breaks so that each heading (e.g., starting with "###") begins on a new line with an empty line above it. Do not wrap your answer in any XML or HTML tags.. If you need to ask for clarification, do so before providing your answer. If you're unsure about any part of your response, indicate this clearly to the user.
 
 Remember, your goal is to provide accurate, helpful information based on the documents provided, while maintaining a friendly and professional demeanor.
 """
