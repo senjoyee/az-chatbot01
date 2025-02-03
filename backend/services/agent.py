@@ -412,10 +412,8 @@ async def generate_response_stream(state: AgentState) -> AsyncIterator[str]:
         final_response = ""
         try:
             async for token_info in stream:
-                # token_info is assumed to be a dict with key "token"; adjust if necessary.
-                token = token_info.get("token", "")
-                final_response += token
-                yield token
+                final_response += token_info.get("token", "")
+                yield token_info.get("token", "")
         except GeneratorExit:
             logger.info("Stream generator exited by client (GeneratorExit)")
             raise
