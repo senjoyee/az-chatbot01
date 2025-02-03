@@ -194,10 +194,7 @@ export default function Chatbot() {
                       ),
                       h2: ({ children }) => (
                         <h2 className="text-base font-semibold my-1">{children}</h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className="text-base font-semibold my-1">{children}</h3>
-                      ),
+                      ),                      
                     }}
                   >
                     {message.text}
