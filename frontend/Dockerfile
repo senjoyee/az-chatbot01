@@ -1,3 +1,6 @@
+# Enable inline cache support
+ARG BUILDKIT_INLINE_CACHE=1
+
 # Use an official Node.js runtime as the base image
 FROM node:20-alpine
 

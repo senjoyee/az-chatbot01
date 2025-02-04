@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - streaming-response
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'

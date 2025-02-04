@@ -1,3 +1,6 @@
+# Enable inline cache support
+ARG BUILDKIT_INLINE_CACHE=1
+
 # Stage 1: Builder
 FROM python:3.11-slim-bookworm as builder
 
