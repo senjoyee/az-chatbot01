@@ -31,12 +31,50 @@ export default function Chatbot() {
   const [error, setError] = useState<string | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
 
+  // Ref for buffering the streaming text
+  const streamingBuffer = useRef<string>('');
+  // Ref for the debounce timer
+  const debounceTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (scrollAreaRef.current) {
       scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
     }
   }, [messages]);
 
+  /**
+   * appendToken - Buffers an incoming token and debounces updates to the streaming message.
+   * @param newToken - The incoming streaming token.
+   */
+  const appendToken = (newToken: string) => {
+    streamingBuffer.current += newToken;
+
+    // Clear any existing debounce timer.
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+
+    // Schedule a debounced update after 200ms of inactivity.
+    debounceTimer.current = setTimeout(() => {
+      // Optional: Format the text by ensuring proper markdown newlines.
+      const formattedText = streamingBuffer.current.replace(/(\r?\n)(?!\r?\n)/g, '\$1\n');
+
+      // Update the last message in the state (assumed to be the streaming assistant message).
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        updated[lastIdx] = {
+          ...updated[lastIdx],
+          text: formattedText
+        };
+        return updated;
+      });
+    }, 200);
+  };
+
+  /**
+   * askQuestionStream - Sends the user's question to the backend and streams the assistant's response.
+   */
   const askQuestionStream = async (
     message: string,
     conversation: Message[],
@@ -74,6 +112,7 @@ export default function Chatbot() {
     if (!input.trim() || loading) return;
     setLoading(true);
 
+    // Create the user and assistant messages.
     const userMessage: Message = {
       id: messages.length + 1,
       text: input.trim(),
@@ -87,29 +126,26 @@ export default function Chatbot() {
       isStreaming: true,
     };
 
+    // Reset the streaming buffer
+    streamingBuffer.current = '';
+
     setMessages(prev => [...prev, userMessage, assistantMessage]);
 
     try {
       await askQuestionStream(
         input.trim(),
         [...messages, userMessage],
+        // Instead of updating state immediately per token, use the buffering function.
         (data: string) => {
-          setMessages(prev => {
-            const updated = [...prev];
-            const lastMessage = updated[updated.length - 1];
-            updated[updated.length - 1] = {
-              ...lastMessage,
-              text: lastMessage.text + data
-            };
-            return updated;
-          });
+          appendToken(data);
         },
         (err: any) => {
+          // On error, mark the assistant message accordingly.
           setMessages(prev => {
             const updated = [...prev];
-            const lastMessage = updated[updated.length - 1];
-            updated[updated.length - 1] = {
-              ...lastMessage,
+            const lastIdx = updated.length - 1;
+            updated[lastIdx] = {
+              ...updated[lastIdx],
               isStreaming: false,
               error: true
             };
@@ -121,9 +157,9 @@ export default function Chatbot() {
     } catch (err: any) {
       setMessages(prev => {
         const updated = [...prev];
-        const lastMessage = updated[updated.length - 1];
-        updated[updated.length - 1] = {
-          ...lastMessage,
+        const lastIdx = updated.length - 1;
+        updated[lastIdx] = {
+          ...updated[lastIdx],
           text: 'Error: ' + (err as Error).message,
           isStreaming: false,
           error: true
@@ -131,6 +167,20 @@ export default function Chatbot() {
         return updated;
       });
     } finally {
+      // Flush any remaining tokens.
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+      setMessages(prev => {
+        const updated = [...prev];
+        const lastIdx = updated.length - 1;
+        updated[lastIdx] = {
+          ...updated[lastIdx],
+          text: streamingBuffer.current.replace(/(\r?\n)(?!\r?\n)/g, '$1\n'),
+          isStreaming: false
+        };
+        return updated;
+      });
       setLoading(false);
       setInput('');
     }
