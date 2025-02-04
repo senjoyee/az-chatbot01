@@ -191,7 +191,7 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
         for pattern in greeting_patterns['initial']:
             if re.search(pattern, lower_question):
                 _input = (
-                    RunnableLambda(lambda x: f"Respond to greeting and direct to docs: '{x.question}'")
+                    RunnableLambda(lambda x: f"Respond to greeting and direct to ask about docs: '{x.question}'")
                     | llm_4o
                     | StrOutputParser()
                 )
