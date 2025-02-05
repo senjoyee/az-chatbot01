@@ -17,7 +17,9 @@ from .tools import RetrieverTool
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
-    AZURE_OPENAI_ENDPOINT
+    AZURE_OPENAI_ENDPOINT,
+    AZURE_OPENAI_API_KEY_SC,
+    AZURE_OPENAI_ENDPOINT_SC,
 )
 from config.azure_search import vector_store
 from models.schemas import Message, AgentState
@@ -290,19 +292,6 @@ def check_customer_specification(state: AgentState) -> AgentState:
     
     return state
 
-def reason_about_query(state: AgentState) -> AgentState:
-    logger.info(f"Reasoning about query with state: {state}")
-    _input = (
-        RunnableLambda(lambda x: {"question": x.question})
-        | QUERY_REASONING_PROMPT
-        | llm_4o_mini
-        | StrOutputParser()
-    )
-    rewritten_query = _input.invoke(state)
-    state.original_question = state.question  # Keep the original question
-    state.question = rewritten_query
-    logger.info(f"Rewritten query: {rewritten_query}")
-    return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
@@ -381,42 +370,6 @@ def generate_response(state: AgentState) -> AgentState:
     state.response = response
     return state
 
-def verify_response(state: AgentState) -> AgentState:
-    logger.info("Verifying the generated response for factual accuracy.")
-
-    # Get a subset of documents as context for verification (if available)
-    context = ""
-    if state.documents:
-        TOP_K_VERIFICATION_DOCS = 2  # Adjust if needed
-        top_verification_docs = state.documents[:TOP_K_VERIFICATION_DOCS]
-        context = "\n\n".join(doc.page_content for doc in top_verification_docs)
-
-    # Build the verification prompt using the generated answer and context
-    verification_input = {
-        "answer": state.response,
-        "context": context
-    }
-    prompt_str = VERIFICATION_PROMPT.format(**verification_input)
-    logger.info(f"Verification prompt: {prompt_str}")
-
-    # Use a RunnableLambda chain to perform the verification step
-    _input = (
-        RunnableLambda(lambda x: {"answer": x.response, "context": context})
-        | VERIFICATION_PROMPT
-        | llm_4o  # using a high-accuracy LLM; adjust if necessary
-        | StrOutputParser()
-    )
-    verification_result = _input.invoke(state)
-    logger.info(f"Verification result: {verification_result}")
-
-    # Check if the verification indicates any issues
-    if "no issues found" not in verification_result.lower():
-        logger.info("Verification indicates issues; updating response with the revised answer.")
-        state.response = verification_result
-    else:
-        logger.info("Verification passed with no issues found.")
-
-    return state
 
 def update_history(state: AgentState) -> AgentState:
     logger.info(f"Updating history with state: {state}")
