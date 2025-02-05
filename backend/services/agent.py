@@ -388,7 +388,7 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: END if s.should_stop else "reason"
+    lambda s: "update_history" if s.should_stop else "reason"  # Fixed syntax
 )
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
