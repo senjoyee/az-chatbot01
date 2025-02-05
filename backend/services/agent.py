@@ -59,6 +59,13 @@ llm_o1_mini = AzureChatOpenAI(
     api_key=AZURE_OPENAI_API_KEY,
 )
 
+llm_o3_mini = AzureChatOpenAI(
+    azure_deployment="o3-mini",
+    openai_api_version="2024-12-01-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_API_KEY,
+)
+
 # List of customer names for filtering
 CUSTOMER_NAMES = [
     "bsw",
@@ -428,7 +435,7 @@ builder = StateGraph(AgentState)
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)  # New node
-builder.add_node("reason", reason_about_query)
+#builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
@@ -442,9 +449,8 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "reason"  # Fixed syntax
+    lambda s: "update_history" if s.should_stop else "retrieve"  # Fixed syntax
 )
-builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
