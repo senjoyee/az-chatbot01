@@ -44,14 +44,6 @@ llm_4o_mini = AzureChatOpenAI(
     temperature=0.0,
 )
 
-llm_4o_mini_creative = AzureChatOpenAI(
-    azure_deployment="gpt-4o-mini",
-    openai_api_version="2023-03-15-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
-    temperature=1.0,
-)
-
 llm_4o = AzureChatOpenAI(
     azure_deployment="gpt-4o",
     openai_api_version="2024-08-01-preview",
@@ -296,7 +288,7 @@ def reason_about_query(state: AgentState) -> AgentState:
     _input = (
         RunnableLambda(lambda x: {"question": x.question})
         | QUERY_REASONING_PROMPT
-        | llm_4o_mini_creative
+        | llm_4o_mini
         | StrOutputParser()
     )
     rewritten_query = _input.invoke(state)
