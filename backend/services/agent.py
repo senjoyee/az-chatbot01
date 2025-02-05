@@ -62,8 +62,8 @@ llm_o1_mini = AzureChatOpenAI(
 llm_o3_mini = AzureChatOpenAI(
     azure_deployment="o3-mini",
     openai_api_version="2024-12-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
+    api_key=AZURE_OPENAI_API_KEY_SC,
 )
 
 # List of customer names for filtering
@@ -372,7 +372,7 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm_o1_mini
+        | llm_o3_mini
         | StrOutputParser()
     )
 
