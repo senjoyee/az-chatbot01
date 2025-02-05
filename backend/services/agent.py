@@ -41,8 +41,7 @@ llm_4o_mini = AzureChatOpenAI(
     openai_api_version="2023-03-15-preview",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
     api_key=AZURE_OPENAI_API_KEY,
-    temperature=0.3,
-    top_p=0.7
+    temperature=0.0,
 )
 
 llm_4o = AzureChatOpenAI(
@@ -50,8 +49,7 @@ llm_4o = AzureChatOpenAI(
     openai_api_version="2024-08-01-preview",
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
     api_key=AZURE_OPENAI_API_KEY,
-    temperature=0.1,
-    top_p=0.9
+    temperature=0.0,
 )
 
 # List of customer names for filtering
@@ -108,6 +106,18 @@ Here is the user's original query:
 Rewrite the query following the guidelines above. Think carefully about how to improve the query's effectiveness in retrieving relevant documents.
 """
 QUERY_REASONING_PROMPT = PromptTemplate.from_template(query_reasoning_template)
+
+verification_template = """
+You are a fact-checker assistant. Given the answer provided below and, if available, an excerpt of context from relevant documents, analyze the answer for factual accuracy. Identify any statements that might be inaccurate or hallucinated, and if any inaccuracies are found, provide a revised, accurate summary of the answer. If the answer is fully accurate, simply respond with "No issues found".
+
+Answer:
+{answer}
+
+Context:
+{context}
+"""
+
+VERIFICATION_PROMPT = PromptTemplate.from_template(verification_template)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
@@ -271,7 +281,7 @@ def reason_about_query(state: AgentState) -> AgentState:
     _input = (
         RunnableLambda(lambda x: {"question": x.question})
         | QUERY_REASONING_PROMPT
-        | llm_4o_mini
+        | llm_4o_mini(temperature=1.0)
         | StrOutputParser()
     )
     rewritten_query = _input.invoke(state)
@@ -348,13 +358,50 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm_4o
+        | llm_4o_mini
         | StrOutputParser()
     )
 
     response = _input.invoke(state)
     response = response.replace("<answer>", "").replace("</answer>", "").strip()
     state.response = response
+    return state
+
+def verify_response(state: AgentState) -> AgentState:
+    logger.info("Verifying the generated response for factual accuracy.")
+
+    # Get a subset of documents as context for verification (if available)
+    context = ""
+    if state.documents:
+        TOP_K_VERIFICATION_DOCS = 2  # Adjust if needed
+        top_verification_docs = state.documents[:TOP_K_VERIFICATION_DOCS]
+        context = "\n\n".join(doc.page_content for doc in top_verification_docs)
+
+    # Build the verification prompt using the generated answer and context
+    verification_input = {
+        "answer": state.response,
+        "context": context
+    }
+    prompt_str = VERIFICATION_PROMPT.format(**verification_input)
+    logger.info(f"Verification prompt: {prompt_str}")
+
+    # Use a RunnableLambda chain to perform the verification step
+    _input = (
+        RunnableLambda(lambda x: {"answer": x.response, "context": context})
+        | VERIFICATION_PROMPT
+        | llm_4o  # using a high-accuracy LLM; adjust if necessary
+        | StrOutputParser()
+    )
+    verification_result = _input.invoke(state)
+    logger.info(f"Verification result: {verification_result}")
+
+    # Check if the verification indicates any issues
+    if "no issues found" not in verification_result.lower():
+        logger.info("Verification indicates issues; updating response with the revised answer.")
+        state.response = verification_result
+    else:
+        logger.info("Verification passed with no issues found.")
+
     return state
 
 def update_history(state: AgentState) -> AgentState:
@@ -370,17 +417,21 @@ def update_history(state: AgentState) -> AgentState:
 # Build the Langgraph
 builder = StateGraph(AgentState)
 
-# Nodes
+# Existing nodes
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
-builder.add_node("check_customer", check_customer_specification)  # New node
+builder.add_node("check_customer", check_customer_specification)
 builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
+
+# NEW: Add the verification node
+builder.add_node("verify", verify_response)
+
 builder.add_node("update_history", update_history)
 
-# Edges
+# Update the edges
 builder.add_conditional_edges(
     "check_initial",
     lambda s: END if s.should_stop else "condense"
@@ -388,12 +439,15 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "reason"  # Fixed syntax
+    lambda s: "update_history" if s.should_stop else "reason"
 )
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
-builder.add_edge("generate", "update_history")
+# Instead of going directly from generate to update_history, route through verify
+builder.add_edge("generate", "verify")
+builder.add_edge("verify", "update_history")
+
 builder.add_edge("update_history", END)
 
 # Set entry point
