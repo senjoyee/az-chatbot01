@@ -60,6 +60,13 @@ llm_4o = AzureChatOpenAI(
     temperature=0.0,
 )
 
+llm_o1_mini = AzureChatOpenAI(
+    azure_deployment="o1-mini",
+    openai_api_version="2024-08-01-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,
+    api_key=AZURE_OPENAI_API_KEY,
+)
+
 # List of customer names for filtering
 CUSTOMER_NAMES = [
     "bsw",
@@ -366,7 +373,7 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm_4o_mini
+        | llm_o1_mini
         | StrOutputParser()
     )
 
@@ -425,21 +432,17 @@ def update_history(state: AgentState) -> AgentState:
 # Build the Langgraph
 builder = StateGraph(AgentState)
 
-# Existing nodes
+# Nodes
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
-builder.add_node("check_customer", check_customer_specification)
+builder.add_node("check_customer", check_customer_specification)  # New node
 builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
-
-# NEW: Add the verification node
-builder.add_node("verify", verify_response)
-
 builder.add_node("update_history", update_history)
 
-# Update the edges
+# Edges
 builder.add_conditional_edges(
     "check_initial",
     lambda s: END if s.should_stop else "condense"
@@ -447,15 +450,12 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "reason"
+    lambda s: "update_history" if s.should_stop else "reason"  # Fixed syntax
 )
 builder.add_edge("reason", "retrieve")
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
-# Instead of going directly from generate to update_history, route through verify
-builder.add_edge("generate", "verify")
-builder.add_edge("verify", "update_history")
-
+builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
 
 # Set entry point
