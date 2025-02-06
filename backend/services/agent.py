@@ -376,11 +376,11 @@ def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
 
     if not state.can_generate_answer:  # Check the decision variable
-        state.response = "The answer to your question cannot be found in the documents."
+        state.response = "I could not find an answer to your question."
         return state
 
     if not state.documents:
-        state.response = "I couldn't find any relevant information to answer your question."
+        state.response = "No documents found relevant to your question."
         return state
 
     TOP_K_DOCUMENTS = 3  # Still use top 3 for actual generation if decided to generate
@@ -408,8 +408,8 @@ def update_history(state: AgentState) -> AgentState:
     if not state.chat_history:
         state.chat_history = []
 
-    # Ensure state.response is a string.
-    if state.response is None:
+    # Ensure state.response is a string, BUT only if no response was set AND we should have generated one.
+    if state.response is None and state.can_generate_answer:
         state.response = "An unexpected error occurred.  I could not process the request."
 
     state.chat_history.extend([
