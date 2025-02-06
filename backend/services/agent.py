@@ -345,7 +345,6 @@ def rerank_documents(state: AgentState) -> AgentState:
     state.documents = [doc for doc, _ in scored_docs]
     return state
 
-# NEW FUNCTION: Decide if an answer can be generated
 def decide_to_generate(state: AgentState) -> AgentState:
     logger.info("Deciding whether to generate a response")
     if not state.documents:
@@ -376,7 +375,7 @@ def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
 
     if not state.can_generate_answer:  # Check the decision variable
-        state.response = "I couldn't find any relevant information to answer your question."
+        state.response = "The answer to your question cannot be found in the documents."
         return state
 
     if not state.documents:
@@ -407,6 +406,11 @@ def update_history(state: AgentState) -> AgentState:
     logger.info(f"Updating history with state: {state}")
     if not state.chat_history:
         state.chat_history = []
+
+    # Ensure state.response is a string.
+    if state.response is None:
+        state.response = "An unexpected error occurred.  I could not process the request."
+
     state.chat_history.extend([
         Message(role="user", content=state.question),
         Message(role="assistant", content=state.response)
@@ -419,10 +423,11 @@ builder = StateGraph(AgentState)
 # Nodes
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
-builder.add_node("check_customer", check_customer_specification)
+builder.add_node("check_customer", check_customer_specification)  # New node
+#builder.add_node("reason", reason_about_query)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
-builder.add_node("decide_to_generate", decide_to_generate)
+builder.add_node("decide_to_generate", decide_to_generate)  # NEW NODE
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
@@ -434,11 +439,11 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "retrieve"
+    lambda s: "update_history" if s.should_stop else "retrieve"  # Fixed syntax
 )
 builder.add_edge("retrieve", "rerank")
-builder.add_edge("rerank", "decide_to_generate")
-builder.add_conditional_edges(
+builder.add_edge("rerank", "decide_to_generate")  # NEW EDGE
+builder.add_conditional_edges(  # NEW CONDITIONAL EDGE
     "decide_to_generate",
     lambda s: "generate" if s.can_generate_answer else "update_history"
 )
