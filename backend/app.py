@@ -7,6 +7,7 @@ from unstructured.partition.docx import partition_docx
 from unstructured.partition.pdf import partition_pdf
 from unstructured.chunking.title import chunk_by_title
 import json
+import asyncio
 from datetime import datetime
 
 # Import utility functions
