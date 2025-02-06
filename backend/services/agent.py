@@ -206,7 +206,7 @@ def check_greeting_and_customer(state: AgentState) -> AgentState:
 
     # Greeting pattern definitions
     greeting_patterns = {
-        'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning', 
+        'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning',
                    r'good afternoon', r'good evening', r'how are you'],
         'response': [r'\bi\'m good\b', r'\bdoing great\b', r'\bnot bad\b',
                     r'\bfine thanks\b', r'\bpretty good\b', r'\ball good\b']
@@ -261,37 +261,36 @@ def check_customer_specification(state: AgentState) -> AgentState:
     if detected := detect_customers(state.question):
         logger.info(f"Detected customers: {detected}")
         return state
-    
+
     # 2. Check chat history (last 3 messages)
     chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
     if history_customers := detect_customers(chat_context):
         logger.info(f"Using historical customer context: {history_customers}")
         state.customer = history_customers[0]  # Take first match
         return state
-    
+
     # 3. Check for contact/keyword triggers
     contact_triggers = {"contacts", "point of contact", "escalation"}
     if any(trigger in state.question.lower() for trigger in contact_triggers):
         state.response = "Which customer's contact information are you requesting?"
         state.should_stop = True
         return state
-    
+
     # 4. Final LLM verification
     prompt = f"""Should this query be handled with customer-specific documents?
     Query: {state.question}
     Chat History: {chat_context}
-    
+
     Answer ONLY yes/no:"""
 
     customer_response = llm_4o_mini.invoke(prompt)
     customer_intent = customer_response.content.strip().lower()
-    
+
     if customer_intent.startswith("yes"):
         state.response = "Please specify which customer this request pertains to."
         state.should_stop = True
-    
-    return state
 
+    return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
@@ -319,10 +318,14 @@ def retrieve_documents(state: AgentState) -> AgentState:
 
 def rerank_documents(state: AgentState) -> AgentState:
     logger.info("Reranking documents")
-
-    query = state.question
     documents = state.documents
 
+    # Check if there are no documents to rerank
+    if not documents:
+        logger.info("No documents found to rerank, skipping reranking step")
+        return state
+
+    query = state.question
     text_pairs = [(query, doc.page_content) for doc in documents]
     inputs = reranker_tokenizer.batch_encode_plus(
         text_pairs,
@@ -369,7 +372,6 @@ def generate_response(state: AgentState) -> AgentState:
     response = response.replace("<answer>", "").replace("</answer>", "").strip()
     state.response = response
     return state
-
 
 def update_history(state: AgentState) -> AgentState:
     logger.info(f"Updating history with state: {state}")
