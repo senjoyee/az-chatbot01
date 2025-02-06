@@ -365,8 +365,9 @@ def decide_to_generate(state: AgentState) -> AgentState:
         | StrOutputParser()
     )
 
-    decision = _input.invoke(state).strip().lower()
-    state.can_generate_answer = (decision == "yes")
+    response = _input.invoke(state).strip().lower()
+    should_generate = "yes" in response
+    state.can_generate_answer = should_generate
     logger.info(f"Decision: {state.can_generate_answer}")
     return state
 
