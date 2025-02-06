@@ -1,7 +1,3 @@
-"""
-Pydantic models for the application.
-"""
-
 from datetime import datetime
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -48,4 +44,4 @@ class AgentState(BaseModel):
     should_stop: bool = False
     conversation_turns: int = 0  # New field to track conversation progression
     customer: Optional[str] = Field(None, description="Active customer context")
-
+    can_generate_answer: Optional[bool] = None # ADD THIS LINE

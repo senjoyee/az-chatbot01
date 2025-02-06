@@ -46,21 +46,6 @@ llm_4o_mini = AzureChatOpenAI(
     temperature=0.0,
 )
 
-llm_4o = AzureChatOpenAI(
-    azure_deployment="gpt-4o",
-    openai_api_version="2024-08-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
-    temperature=0.0,
-)
-
-llm_o1_mini = AzureChatOpenAI(
-    azure_deployment="o1-mini",
-    openai_api_version="2024-08-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
-)
-
 llm_o3_mini = AzureChatOpenAI(
     azure_deployment="o3-mini",
     openai_api_version="2024-12-01-preview",
@@ -181,10 +166,24 @@ When formulating your answer, keep the following in mind:
 - Maintain a professional and helpful tone throughout your response.
 
 Provide your answer within <answer> tags. If you need to ask for clarification, do so before providing your answer. If you're unsure about any part of your response, indicate this clearly to the user.
-
-Remember, your goal is to provide accurate, helpful information based on the documents provided, while maintaining a friendly and professional demeanor.
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
+
+# NEW: Prompt for deciding if an answer can be generated
+DECISION_PROMPT = PromptTemplate.from_template(
+    """Given the following question and document excerpts, determine if a reasonable answer can be generated.
+
+    <question>
+    {question}
+    </question>
+
+    <documents>
+    {context}
+    </documents>
+
+    Respond with 'yes' if a reasonable answer can be generated, or 'no' if not.
+    """
+)
 
 def format_chat_history(chat_history: List[Message]) -> str:
     """Format chat history for the model."""
@@ -346,14 +345,45 @@ def rerank_documents(state: AgentState) -> AgentState:
     state.documents = [doc for doc, _ in scored_docs]
     return state
 
+# NEW FUNCTION: Decide if an answer can be generated
+def decide_to_generate(state: AgentState) -> AgentState:
+    logger.info("Deciding whether to generate a response")
+    if not state.documents:
+        state.can_generate_answer = False
+        return state
+
+    TOP_K_DOCUMENTS = 3
+    top_documents = state.documents[:TOP_K_DOCUMENTS]
+    context = "\n\n".join(doc.page_content for doc in top_documents)
+
+    _input = (
+        RunnableLambda(lambda x: {
+            "context": context,
+            "question": x.question
+        })
+        | DECISION_PROMPT
+        | llm_o3_mini  # Use the specified model
+        | StrOutputParser()
+    )
+
+    decision = _input.invoke(state).strip().lower()
+    state.can_generate_answer = (decision == "yes")
+    logger.info(f"Decision: {state.can_generate_answer}")
+    return state
+
+
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
+
+    if not state.can_generate_answer:  # Check the decision variable
+        state.response = "I couldn't find any relevant information to answer your question."
+        return state
 
     if not state.documents:
         state.response = "I couldn't find any relevant information to answer your question."
         return state
 
-    TOP_K_DOCUMENTS = 3
+    TOP_K_DOCUMENTS = 3  # Still use top 3 for actual generation if decided to generate
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
@@ -389,10 +419,10 @@ builder = StateGraph(AgentState)
 # Nodes
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
-builder.add_node("check_customer", check_customer_specification)  # New node
-#builder.add_node("reason", reason_about_query)
+builder.add_node("check_customer", check_customer_specification)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
+builder.add_node("decide_to_generate", decide_to_generate)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
@@ -404,10 +434,14 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "retrieve"  # Fixed syntax
+    lambda s: "update_history" if s.should_stop else "retrieve"
 )
 builder.add_edge("retrieve", "rerank")
-builder.add_edge("rerank", "generate")
+builder.add_edge("rerank", "decide_to_generate")
+builder.add_conditional_edges(
+    "decide_to_generate",
+    lambda s: "generate" if s.can_generate_answer else "update_history"
+)
 builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
 
@@ -423,7 +457,8 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
         "question": question,
         "chat_history": chat_history,
         "documents": None,
-        "response": None
+        "response": None,
+        "can_generate_answer": True  # Initialize the new state variable
     }
     try:
         result = await agent.ainvoke(inputs)
