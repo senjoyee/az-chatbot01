@@ -37,11 +37,11 @@ class FileProcessingStatus(BaseModel):
 
 class AgentState(BaseModel):
     question: str
-    original_question: Optional[str] = None
     chat_history: List[Message]
-    documents: Optional[List[Document]] = None
+    documents: Optional[List[Any]] = None
     response: Optional[str] = None
-    should_stop: bool = False
+    customer: Optional[str] = None
     conversation_turns: int = 0
-    customer: Optional[str] = Field(None, description="Active customer context")
-    can_generate_answer: Optional[bool] = None
+    should_stop: bool = False
+    can_generate_answer: bool = True
+    answer_generated_from_document_store: Optional[str] = None

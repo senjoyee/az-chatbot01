@@ -1,5 +1,3 @@
-# backend/services/agent.py
-
 import logging
 from typing import List, Dict, Any
 import torch
@@ -22,7 +20,7 @@ from config.settings import (
     AZURE_OPENAI_ENDPOINT_SC,
 )
 from config.azure_search import vector_store
-from models.schemas import Message, AgentState
+from models.schemas import Message, AgentState  # Import AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -169,7 +167,7 @@ Provide your answer within <answer> tags. If you need to ask for clarification, 
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
-# NEW: Prompt for deciding if an answer can be generated
+# Prompt for deciding if an answer can be generated
 DECISION_PROMPT = PromptTemplate.from_template(
     """Given the following question and document excerpts, determine if a reasonable answer can be generated.
 
@@ -310,9 +308,20 @@ def retrieve_documents(state: AgentState) -> AgentState:
             "filters": filters
         })
         logger.info(f"Retrieved {len(state.documents)} documents")
+
+        # --- SHORT-CIRCUIT IF NO DOCUMENTS ---
+        if not state.documents:
+            state.response = "I could not find any relevant documents in the database."
+            state.should_stop = True
+            return state  # Exit early
+
     except Exception as e:
         logger.error(f"Error retrieving documents: {str(e)}")
         state.documents = []  # Ensure we have a valid state even on failure
+        state.response = "An error occurred while retrieving documents."
+        state.should_stop = True  # Also stop on error
+        return state
+
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
@@ -321,8 +330,8 @@ def rerank_documents(state: AgentState) -> AgentState:
 
     # Check if there are no documents to rerank
     if not documents:
-        logger.info("No documents found to rerank, skipping reranking step")
-        return state
+        logger.info("No documents to rerank, skipping reranking step")
+        return state  # No need to raise an exception
 
     query = state.question
     text_pairs = [(query, doc.page_content) for doc in documents]
@@ -347,9 +356,6 @@ def rerank_documents(state: AgentState) -> AgentState:
 
 def decide_to_generate(state: AgentState) -> AgentState:
     logger.info("Deciding whether to generate a response")
-    if not state.documents:
-        state.can_generate_answer = False
-        return state
 
     TOP_K_DOCUMENTS = 3
     top_documents = state.documents[:TOP_K_DOCUMENTS]
@@ -361,29 +367,32 @@ def decide_to_generate(state: AgentState) -> AgentState:
             "question": x.question
         })
         | DECISION_PROMPT
-        | llm_o3_mini  # Use the specified model
+        | llm_o3_mini
         | StrOutputParser()
     )
 
     response = _input.invoke(state).strip().lower()
-    should_generate = "yes" in response
-    state.can_generate_answer = should_generate
-    logger.info(f"Decision: {state.can_generate_answer}")
+    state.can_generate_answer = "yes" in response
+
+    # Set answer_generated_from_document_store and response accordingly
+    if state.can_generate_answer:
+        state.answer_generated_from_document_store = "pass"
+    else:
+        state.answer_generated_from_document_store = "fail"
+        state.response = "Your query cannot be answered from the documents."
+
+    logger.info(f"Decision: {state.can_generate_answer}, Document Store Answer: {state.answer_generated_from_document_store}")
     return state
 
 
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
 
-    if not state.can_generate_answer:  # Check the decision variable
-        state.response = "I could not find an answer to your question."
-        return state
+    # Only generate if answer was successfully generated from documents
+    if state.answer_generated_from_document_store != "pass":
+        return state  #  Exit if not
 
-    if not state.documents:
-        state.response = "No documents found relevant to your question."
-        return state
-
-    TOP_K_DOCUMENTS = 3  # Still use top 3 for actual generation if decided to generate
+    TOP_K_DOCUMENTS = 3
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
@@ -408,10 +417,6 @@ def update_history(state: AgentState) -> AgentState:
     if not state.chat_history:
         state.chat_history = []
 
-    # Ensure state.response is a string, BUT only if no response was set AND we should have generated one.
-    if state.response is None and state.can_generate_answer:
-        state.response = "An unexpected error occurred.  I could not process the request."
-
     state.chat_history.extend([
         Message(role="user", content=state.question),
         Message(role="assistant", content=state.response)
@@ -424,11 +429,10 @@ builder = StateGraph(AgentState)
 # Nodes
 builder.add_node("check_initial", check_greeting_and_customer)
 builder.add_node("condense", condense_question)
-builder.add_node("check_customer", check_customer_specification)  # New node
-#builder.add_node("reason", reason_about_query)
+builder.add_node("check_customer", check_customer_specification)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
-builder.add_node("decide_to_generate", decide_to_generate)  # NEW NODE
+builder.add_node("decide_to_generate", decide_to_generate)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
@@ -440,13 +444,17 @@ builder.add_conditional_edges(
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "retrieve"  # Fixed syntax
+    lambda s: "update_history" if s.should_stop else "retrieve"
 )
-builder.add_edge("retrieve", "rerank")
-builder.add_edge("rerank", "decide_to_generate")  # NEW EDGE
-builder.add_conditional_edges(  # NEW CONDITIONAL EDGE
+builder.add_conditional_edges(
+    "retrieve",
+    lambda s: "update_history" if s.should_stop else "rerank"
+)
+builder.add_edge("rerank", "decide_to_generate")
+builder.add_conditional_edges(
     "decide_to_generate",
-    lambda s: "generate" if s.can_generate_answer else "update_history"
+    #  Go to generate ONLY if answer was generated from docs
+    lambda s: "generate" if s.answer_generated_from_document_store == "pass" else "update_history"
 )
 builder.add_edge("generate", "update_history")
 builder.add_edge("update_history", END)
@@ -464,7 +472,9 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
         "chat_history": chat_history,
         "documents": None,
         "response": None,
-        "can_generate_answer": True  # Initialize the new state variable
+        "can_generate_answer": True,
+        "should_stop": False,
+        "answer_generated_from_document_store": None,  # Initialize correctly
     }
     try:
         result = await agent.ainvoke(inputs)
