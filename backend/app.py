@@ -287,7 +287,9 @@ async def process_file_async(event: BlobEvent):
                 if file_extension == '.pdf':
                     elements = partition_pdf(
                         filename=temp_file_path,
-                        strategy="fast"
+                        strategy="hi_res",
+                        infer_table_structure=True,
+                        include_metadata=True
                     )
                     logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
                 elif file_extension in ['.doc', '.docx']:
