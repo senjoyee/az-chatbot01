@@ -178,45 +178,57 @@ async def delete_file(filename: str):
 
 @app.post("/uploadfiles")
 async def upload_files(files: list[UploadFile] = File(...),
-                       customer_names: list[str] = Form(...)):  # New parameter to receive customer names
-    try:
-        # Check if the number of files and customer names match
-        if len(files) != len(customer_names):
-            logger.error("Number of files and customer names do not match.")
-            raise HTTPException(
-                status_code=400,
-                detail="Number of files and customer names do not match."
-            )
+                       customer_names: list[str] = Form(...)):
+    results = []
+    
+    # Initialize all files as NOT_STARTED
+    for file in files:
+        await storage_manager.create_status(file.filename, ProcessingStatus.NOT_STARTED)
+    
+    # Process files strictly sequentially
+    for file in files:
+        try:
+            # Mark current file as IN_PROGRESS
+            await storage_manager.update_status(file.filename, ProcessingStatus.IN_PROGRESS)
+            
+            # Process single file
+            result = await process_single_file_async(file, customer_names)
+            await storage_manager.update_status(file.filename, ProcessingStatus.COMPLETED)
+            results.append({"filename": file.filename, "status": "success"})
+            
+        except Exception as e:
+            await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
+            results.append({"filename": file.filename, "status": "error", "message": str(e)})
+    
+    return {"results": results}
 
-        # Add size validation
-        MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+
+async def process_single_file_async(file: UploadFile, customer_names: list[str]):
+    # Add size validation
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+    
+    container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+    uploaded_files = []
+
+    # Validate file size
+    contents = await file.read()
+    if len(contents) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
+        )
         
-        container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-        uploaded_files = []
-
-        for file, customer_name in zip(files, customer_names):
-            # Validate file size
-            contents = await file.read()
-            if len(contents) > MAX_FILE_SIZE:
-                raise HTTPException(
-                    status_code=413,
-                    detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
-                )
-                
-            try:
-                blob_client = container_client.get_blob_client(blob=file.filename)
-                blob_client.upload_blob(contents,
-                overwrite=True,
-                metadata={"customer": customer_name})
-                uploaded_files.append(file.filename)
-            except Exception as e:
-                logger.error(f"Error uploading file {file.filename}: {str(e)}")
-                raise HTTPException(status_code=500, detail=f"Error uploading file {file.filename}: {str(e)}")
-
-        return {"uploaded_files": uploaded_files}
+    try:
+        blob_client = container_client.get_blob_client(blob=file.filename)
+        blob_client.upload_blob(contents,
+        overwrite=True,
+        metadata={"customer": customer_names[0]})
+        uploaded_files.append(file.filename)
     except Exception as e:
-        logger.error(f"Error in upload_files: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error uploading file {file.filename}: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Error uploading file {file.filename}: {str(e)}")
+
+    return {"uploaded_files": uploaded_files}
 
 
 @app.post("/process_uploaded_files")
