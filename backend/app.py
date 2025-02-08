@@ -178,27 +178,34 @@ async def delete_file(filename: str):
 
 @app.post("/uploadfiles")
 async def upload_files(files: list[UploadFile] = File(...),
-                       customer_names: list[str] = Form(...)):
+                      customer_names: list[str] = Form(...)):
     results = []
     
     # Initialize all files as NOT_STARTED
     for file in files:
-        await storage_manager.create_status(file.filename, ProcessingStatus.NOT_STARTED)
+        await create_file_status(file.filename, ProcessingStatus.NOT_STARTED)
     
-    # Process files strictly sequentially
+    # Process files one at a time
     for file in files:
         try:
-            # Mark current file as IN_PROGRESS
-            await storage_manager.update_status(file.filename, ProcessingStatus.IN_PROGRESS)
+            # Set current file to IN_PROGRESS
+            await update_file_status(file.filename, ProcessingStatus.IN_PROGRESS)
             
-            # Process single file
+            # Process the file
             result = await process_single_file_async(file, customer_names)
-            await storage_manager.update_status(file.filename, ProcessingStatus.COMPLETED)
+            
+            # Update status to COMPLETED
+            await update_file_status(file.filename, ProcessingStatus.COMPLETED)
             results.append({"filename": file.filename, "status": "success"})
             
         except Exception as e:
-            await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
-            results.append({"filename": file.filename, "status": "error", "message": str(e)})
+            # Handle failure
+            await update_file_status(file.filename, ProcessingStatus.FAILED)
+            results.append({
+                "filename": file.filename,
+                "status": "error",
+                "message": str(e)
+            })
     
     return {"results": results}
 
