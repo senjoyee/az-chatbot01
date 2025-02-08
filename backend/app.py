@@ -39,7 +39,7 @@ app.add_middleware(
         "https://jsragfunc01.azurewebsites.net",          # Function App URL
     ],
     allow_credentials=True,
-    allow_methods=["POST", "GET", "DELETE"],  # Specify allowed methods
+    allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
@@ -173,7 +173,7 @@ async def upload_files(files: list[UploadFile] = File(...),
 
     # Initialize all files as NOT_STARTED
     for file in files:
-        await storage_manager.create_status(file.filename, ProcessingStatus.NOT_STARTED)
+        await storage_manager.update_status(file.filename, ProcessingStatus.NOT_STARTED)
 
     # Process files strictly sequentially
     for file in files:
