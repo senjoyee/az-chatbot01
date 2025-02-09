@@ -501,7 +501,6 @@ builder.add_node("decide_to_generate", decide_to_generate)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 builder.add_node("ask_web_search", ask_web_search_confirmation)
-builder.add_node("handle_web_confirm", handle_web_confirmation)
 builder.add_node("perform_web_search", perform_web_search)
 builder.add_node("generate_web_response", generate_web_response)
 
