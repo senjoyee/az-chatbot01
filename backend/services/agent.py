@@ -417,7 +417,6 @@ def ask_web_search_confirmation(state: AgentState) -> AgentState:
     """Prompts user for web search confirmation"""
     state.waiting_for_web_search_confirmation = True
     state.response = "I couldn't find enough information in our documents. Would you like me to search the web?"
-    state.should_stop = True  # Pause processing until user responds
     return state
 
 def handle_web_confirmation(state: AgentState) -> AgentState:
