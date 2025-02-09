@@ -179,7 +179,7 @@ DECISION_PROMPT = PromptTemplate.from_template(
     {context}
     </documents>
 
-    Respond with 'yes' if a reasonable answer can be generated, or 'no' if not.
+    Respond only with 'yes' if a reasonable answer can be generated with the provided documents, or 'no' if not.
     """
 )
 
@@ -410,8 +410,6 @@ def generate_response(state: AgentState) -> AgentState:
     response = response.replace("<answer>", "").replace("</answer>", "").strip()
     state.response = response
     return state
-
-# c:\GenAI\az-chatbot-01\application\backend\services\agent.py
 
 def ask_web_search_confirmation(state: AgentState) -> AgentState:
     """Prompts user for web search confirmation"""
