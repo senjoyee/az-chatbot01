@@ -537,7 +537,7 @@ builder.add_conditional_edges(
 
 builder.add_conditional_edges(
     "handle_web_confirm",
-    lambda s: "perform_web_search" if s.web_search_query else "end"
+    lambda s: "perform_web_search" if s.web_search_query else END
 )
 
 builder.add_edge("perform_web_search", "generate_web_response")
