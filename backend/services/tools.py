@@ -30,3 +30,30 @@ class RetrieverTool(BaseTool):
             return documents
         except Exception as e:
             raise RuntimeError(f"Error retrieving documents: {str(e)}")
+
+
+from langchain_community.tools import DuckDuckGoSearchResults
+
+class DuckDuckGoSearchTool:
+    """Web search using DuckDuckGo (no API key required)"""
+    
+    def __init__(self, max_results: int = 5):
+        self.max_results = max(1, min(max_results, 10))
+        self.tool = DuckDuckGoSearchResults(max_results=self.max_results)
+
+    def run(self, query: str) -> List[Dict]:
+        """Returns structured results (title, url, snippet)"""
+        raw_results = self.tool.run(query)
+        return self._parse_results(raw_results)
+
+    def _parse_results(self, raw_results: str) -> List[Dict]:
+        processed = []
+        for result in raw_results.split('\n\n'):  # Split individual results
+            parts = result.split('\n')
+            if len(parts) >= 2:
+                processed.append({
+                    "title": parts[0].strip(),
+                    "url": parts[1].strip(),
+                    "snippet": parts[2].strip() if len(parts) > 2 else ""
+                })
+        return processed[:self.max_results]

@@ -40,6 +40,10 @@ class AgentState(BaseModel):
     chat_history: List[Message]
     documents: Optional[List[Any]] = None
     response: Optional[str] = None
+    # Web search state
+    waiting_for_web_search_confirmation: bool = False
+    web_documents: Optional[List[Document]] = None
+    web_search_query: Optional[str] = None
     customer: Optional[str] = None
     conversation_turns: int = 0
     should_stop: bool = False
