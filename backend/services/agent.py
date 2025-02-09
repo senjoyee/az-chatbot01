@@ -379,7 +379,6 @@ def decide_to_generate(state: AgentState) -> AgentState:
         state.answer_generated_from_document_store = "pass"
     else:
         state.answer_generated_from_document_store = "fail"
-        state.response = "Your query cannot be answered from the documents."
 
     logger.info(f"Decision: {state.can_generate_answer}, Document Store Answer: {state.answer_generated_from_document_store}")
     return state
