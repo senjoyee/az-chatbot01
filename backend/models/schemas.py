@@ -49,3 +49,12 @@ class AgentState(BaseModel):
     should_stop: bool = False
     can_generate_answer: bool = True
     answer_generated_from_document_store: Optional[str] = None
+    pending_web_search_query: Optional[str] = None
+
+class FileProcessingStatus(BaseModel):
+    """Model for file processing status."""
+    status: str  # Using str instead of ProcessingStatus to avoid circular imports
+    file_name: str
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    error_message: Optional[str] = None
