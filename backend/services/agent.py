@@ -413,14 +413,15 @@ def generate_response(state: AgentState) -> AgentState:
 
 def ask_web_search_confirmation(state: AgentState) -> AgentState:
     """Prompts user for web search confirmation"""
+    state.pending_web_search_query = state.question
     state.waiting_for_web_search_confirmation = True
-    state.response = "I couldn't find enough information in our documents. Would you like me to search the web?"
+    state.response = "I couldn't find enough information in our documents. Would you like me to search the web? Please respond with 'yes' or 'no'."
     return state
 
 def handle_web_confirmation(state: AgentState) -> AgentState:
-    """Processes user's response to web search prompt"""
     if state.question.strip().lower() in {"yes", "y", "sure"}:
-        state.web_search_query = state.question
+        # Use the stored query instead of the confirmation response
+        state.web_search_query = state.pending_web_search_query
         state.waiting_for_web_search_confirmation = False
         return perform_web_search(state)
     else:
