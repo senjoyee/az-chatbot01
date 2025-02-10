@@ -357,7 +357,7 @@ def rerank_documents(state: AgentState) -> AgentState:
 def decide_to_generate(state: AgentState) -> AgentState:
     logger.info("Deciding whether to generate a response")
 
-    TOP_K_DOCUMENTS = 3
+    TOP_K_DOCUMENTS = 6
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
 
@@ -379,7 +379,7 @@ def decide_to_generate(state: AgentState) -> AgentState:
         state.answer_generated_from_document_store = "pass"
     else:
         state.answer_generated_from_document_store = "fail"
-        state.response = "Your query cannot be answered from the documents."
+        state.response = "The answer to your query cannot be generated from the documents provided."
 
     logger.info(f"Decision: {state.can_generate_answer}, Document Store Answer: {state.answer_generated_from_document_store}")
     return state
@@ -392,7 +392,7 @@ def generate_response(state: AgentState) -> AgentState:
     if state.answer_generated_from_document_store != "pass":
         return state  #  Exit if not
 
-    TOP_K_DOCUMENTS = 3
+    TOP_K_DOCUMENTS = 6
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
