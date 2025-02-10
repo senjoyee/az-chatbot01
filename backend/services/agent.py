@@ -179,7 +179,7 @@ DECISION_PROMPT = PromptTemplate.from_template(
     {context}
     </documents>
 
-    Respond only with 'yes' if a reasonable answer can be generated with the provided documents, or 'no' if not.
+    Respond with 'yes' if a reasonable answer can be generated, or 'no' if not.
     """
 )
 
@@ -379,6 +379,7 @@ def decide_to_generate(state: AgentState) -> AgentState:
         state.answer_generated_from_document_store = "pass"
     else:
         state.answer_generated_from_document_store = "fail"
+        state.response = "Your query cannot be answered from the documents."
 
     logger.info(f"Decision: {state.can_generate_answer}, Document Store Answer: {state.answer_generated_from_document_store}")
     return state
@@ -411,78 +412,6 @@ def generate_response(state: AgentState) -> AgentState:
     state.response = response
     return state
 
-def ask_web_search_confirmation(state: AgentState) -> AgentState:
-    """Prompts user for web search confirmation"""
-    state.pending_web_search_query = state.question
-    state.waiting_for_web_search_confirmation = True
-    state.response = "I couldn't find enough information in our documents. Would you like me to search the web? Please respond with 'yes' or 'no'."
-    state.should_stop = True  # Stop here to wait for user confirmation
-    return state
-
-def handle_web_confirmation(state: AgentState) -> AgentState:
-    """Handles the user's response to web search confirmation"""
-    if not state.waiting_for_web_search_confirmation:
-        return state
-        
-    user_response = state.question.strip().lower()
-    if user_response in {"yes", "y", "sure"}:
-        state.web_search_query = state.pending_web_search_query
-        state.waiting_for_web_search_confirmation = False
-        return perform_web_search(state)
-    elif user_response in {"no", "n"}:
-        state.response = "Okay, let me know if you have other questions."
-        state.should_stop = True
-        return state
-    else:
-        state.response = "Please respond with 'yes' or 'no' to confirm if you want me to search the web."
-        state.should_stop = True
-        return state
-
-def perform_web_search(state: AgentState) -> AgentState:
-    """Executes web search using DuckDuckGo tool"""
-    try:
-        search_tool = DuckDuckGoSearchTool(max_results=5)
-        raw_results = search_tool.run(state.web_search_query)
-        
-        # Convert to Langchain Documents format
-        state.web_documents = [
-            Document(
-                page_content=f"{res['title']}\n{res['snippet']}",
-                metadata={"source": res['url']}
-            ) for res in raw_results
-        ]
-        
-        if not state.web_documents:
-            state.response = "Web search didn't find relevant results."
-            state.should_stop = True
-            return state
-            
-        return generate_web_response(state)
-        
-    except Exception as e:
-        state.response = f"Web search failed: {str(e)}"
-        state.should_stop = True
-        return state
-
-def generate_web_response(state: AgentState) -> AgentState:
-    """Generates answer from web search results"""
-    try:
-        context = "\n\n".join(
-            f"Source {i+1}:\n{doc.page_content}" 
-            for i, doc in enumerate(state.web_documents[:3])
-        )
-        
-        response = (
-            f"Based on web research:\n\n{context[:1000]}..."
-            "\n\nNote: Always verify information from original sources"
-        )
-        
-        state.response = response
-        return state
-    except Exception as e:
-        state.response = f"Error generating web response: {str(e)}"
-        return state
-
 def update_history(state: AgentState) -> AgentState:
     logger.info(f"Updating history with state: {state}")
     if not state.chat_history:
@@ -506,19 +435,13 @@ builder.add_node("rerank", rerank_documents)
 builder.add_node("decide_to_generate", decide_to_generate)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
-builder.add_node("ask_web_search", ask_web_search_confirmation)
-builder.add_node("handle_web_confirm", handle_web_confirmation)
-builder.add_node("perform_web_search", perform_web_search)  # Only one instance
-builder.add_node("generate_web_response", generate_web_response)
 
 # Edges
-
 builder.add_conditional_edges(
     "check_initial",
     lambda s: END if s.should_stop else "condense"
 )
 builder.add_edge("condense", "check_customer")
-
 builder.add_conditional_edges(
     "check_customer",
     lambda s: "update_history" if s.should_stop else "retrieve"
@@ -528,31 +451,13 @@ builder.add_conditional_edges(
     lambda s: "update_history" if s.should_stop else "rerank"
 )
 builder.add_edge("rerank", "decide_to_generate")
-# In the section where the agent graph is built:
-
-# Fix edge definitions
 builder.add_conditional_edges(
     "decide_to_generate",
-    lambda s: "generate" if s.answer_generated_from_document_store == "pass" else "ask_web_search"
+    #  Go to generate ONLY if answer was generated from docs
+    lambda s: "generate" if s.answer_generated_from_document_store == "pass" else "update_history"
 )
-
-builder.add_conditional_edges(
-    "ask_web_search",
-    lambda s: "update_history" if s.should_stop else "handle_web_confirm"
-)
-
-builder.add_conditional_edges(
-    "handle_web_confirm",
-    lambda s: (
-        "perform_web_search" if s.web_search_query 
-        else "update_history" if s.should_stop
-        else "handle_web_confirm"
-    )
-)
-
-# Restore edges for web search flow
-builder.add_edge("perform_web_search", "generate_web_response")
-builder.add_edge("generate_web_response", "update_history")
+builder.add_edge("generate", "update_history")
+builder.add_edge("update_history", END)
 
 # Set entry point
 builder.set_entry_point("check_initial")
