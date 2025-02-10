@@ -304,7 +304,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
 
         state.documents = retriever_tool.run({
             "query": state.question,
-            "k": 10,
+            "k": 20,
             "filters": filters
         })
         logger.info(f"Retrieved {len(state.documents)} documents")
@@ -357,7 +357,7 @@ def rerank_documents(state: AgentState) -> AgentState:
 def decide_to_generate(state: AgentState) -> AgentState:
     logger.info("Deciding whether to generate a response")
 
-    TOP_K_DOCUMENTS = 6
+    TOP_K_DOCUMENTS = 12
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
 
@@ -392,7 +392,7 @@ def generate_response(state: AgentState) -> AgentState:
     if state.answer_generated_from_document_store != "pass":
         return state  #  Exit if not
 
-    TOP_K_DOCUMENTS = 6
+    TOP_K_DOCUMENTS = 12
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
