@@ -416,16 +416,25 @@ def ask_web_search_confirmation(state: AgentState) -> AgentState:
     state.pending_web_search_query = state.question
     state.waiting_for_web_search_confirmation = True
     state.response = "I couldn't find enough information in our documents. Would you like me to search the web? Please respond with 'yes' or 'no'."
+    state.should_stop = True  # Stop here to wait for user confirmation
     return state
 
 def handle_web_confirmation(state: AgentState) -> AgentState:
-    if state.question.strip().lower() in {"yes", "y", "sure"}:
-        # Use the stored query instead of the confirmation response
+    """Handles the user's response to web search confirmation"""
+    if not state.waiting_for_web_search_confirmation:
+        return state
+        
+    user_response = state.question.strip().lower()
+    if user_response in {"yes", "y", "sure"}:
         state.web_search_query = state.pending_web_search_query
         state.waiting_for_web_search_confirmation = False
         return perform_web_search(state)
-    else:
+    elif user_response in {"no", "n"}:
         state.response = "Okay, let me know if you have other questions."
+        state.should_stop = True
+        return state
+    else:
+        state.response = "Please respond with 'yes' or 'no' to confirm if you want me to search the web."
         state.should_stop = True
         return state
 
@@ -529,16 +538,22 @@ builder.add_conditional_edges(
 
 builder.add_conditional_edges(
     "ask_web_search",
-    lambda s: "handle_web_confirm" if s.waiting_for_web_search_confirmation else "end"
+    lambda s: "update_history" if s.should_stop else "handle_web_confirm"
 )
 
 builder.add_conditional_edges(
     "handle_web_confirm",
-    lambda s: "perform_web_search" if s.web_search_query else END
+    lambda s: (
+        "perform_web_search" if s.web_search_query 
+        else "update_history" if s.should_stop
+        else "handle_web_confirm"
+    )
 )
 
+# Restore edges for web search flow
 builder.add_edge("perform_web_search", "generate_web_response")
 builder.add_edge("generate_web_response", "update_history")
+
 # Set entry point
 builder.set_entry_point("check_initial")
 
