@@ -93,20 +93,27 @@ def extract_source(file_name: str) -> str:
     
     return source if source else "UNKNOWN"
 
-def is_casual_conversation(message: str) -> bool:
+def is_casual_conversation(message: str, llm=None) -> bool:
     """Determines if a message requires casual response.
     
     Args:
         message: User input text
+        llm: Optional language model to use for classification
     
     Returns:
         bool: True if message is casual conversation
     """
+    if llm is None:
+        try:
+            from services.agent import llm_4o_mini as llm
+        except ImportError:
+            raise ImportError("Failed to import llm from services.agent")
+
     classification_prompt = '''
     You will be given a user message and your task is to determine if it is casual talk like a greeting or something similar. Here is the user message:
 
     <user_message>
-    {USER_MESSAGE}
+    {message}
     </user_message>
 
     Casual talk typically includes:
@@ -123,10 +130,10 @@ def is_casual_conversation(message: str) -> bool:
     [Explain your thought process here]
     </reasoning>
 
-<answer>
+    <answer>
     [Respond with only "yes" if the message is casual talk, or "no" if it is not]
-</answer>
+    </answer>
     '''
     
     response = llm.invoke(classification_prompt.format(message=message))
-    return response.strip().lower() == 'yes'
+    return response.content.strip().lower() == 'yes'
