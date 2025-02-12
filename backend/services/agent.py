@@ -385,8 +385,7 @@ builder.add_node("update_history", update_history)
 # Handle casual conversation and main flow branching
 builder.add_conditional_edges(
     "detect_casual",
-    lambda s: "respond_casual" if s.needs_casual_response else "condense",
-    branch_names=["is_casual", "not_casual"]
+    lambda s: "respond_casual" if s.needs_casual_response else "condense"
 )
 
 # Main conversation flow
@@ -394,27 +393,23 @@ builder.add_edge("respond_casual", "update_history")
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "retrieve",
-    branch_names=["stop_at_customer", "continue_to_retrieve"]
+    lambda s: "update_history" if s.should_stop else "retrieve"
 )
 builder.add_conditional_edges(
     "retrieve",
-    lambda s: "update_history" if s.should_stop else "rerank",
-    branch_names=["stop_at_retrieve", "continue_to_rerank"]
+    lambda s: "update_history" if s.should_stop else "rerank"
 )
 builder.add_edge("rerank", "decide_to_generate")
 builder.add_conditional_edges(
     "decide_to_generate",
-    lambda s: "generate" if s.can_generate_answer else "update_history",
-    branch_names=["can_generate", "cannot_generate"]
+    lambda s: "generate" if s.can_generate_answer else "update_history"
 )
 builder.add_edge("generate", "update_history")
 
 # Final edge - either continue or end
 builder.add_conditional_edges(
     "update_history",
-    lambda s: END if s.should_stop else "detect_casual",
-    branch_names=["end_conversation", "continue_conversation"]
+    lambda s: END if s.should_stop else "detect_casual"
 )
 
 # Set entry point
