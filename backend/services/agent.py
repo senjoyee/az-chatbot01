@@ -12,7 +12,7 @@ from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 from .tools import RetrieverTool
-from backend.utils.helpers import is_casual_conversation
+from utils.helpers import is_casual_conversation
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
