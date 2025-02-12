@@ -92,3 +92,41 @@ def extract_source(file_name: str) -> str:
     source = ''.join(c for c in first_part if c.isalpha()).upper()
     
     return source if source else "UNKNOWN"
+
+def is_casual_conversation(message: str) -> bool:
+    """Determines if a message requires casual response.
+    
+    Args:
+        message: User input text
+    
+    Returns:
+        bool: True if message is casual conversation
+    """
+    classification_prompt = '''
+    You will be given a user message and your task is to determine if it is casual talk like a greeting or something similar. Here is the user message:
+
+    <user_message>
+    {USER_MESSAGE}
+    </user_message>
+
+    Casual talk typically includes:
+    - Greetings (e.g., "Hello", "Hi", "Hey")
+    - Farewells (e.g., "Goodbye", "See you later", "Take care")
+    - Small talk about weather, time of day, or general well-being (e.g., "Nice day, isn't it?", "How are you?")
+    - Brief, friendly expressions (e.g., "Have a good one", "What's up?")
+
+    Analyze the user message and determine if it fits the criteria for casual talk.
+
+    Provide your reasoning first, then give your final answer. Your response should be structured as follows:
+
+    <reasoning>
+    [Explain your thought process here]
+    </reasoning>
+
+<answer>
+    [Respond with only "yes" if the message is casual talk, or "no" if it is not]
+</answer>
+    '''
+    
+    response = llm.invoke(classification_prompt.format(message=message))
+    return response.strip().lower() == 'yes'

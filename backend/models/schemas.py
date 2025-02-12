@@ -36,6 +36,7 @@ class FileProcessingStatus(BaseModel):
     error_message: Optional[str] = None
 
 class AgentState(BaseModel):
+    """Model for agent state."""
     question: str
     chat_history: List[Message]
     documents: Optional[List[Any]] = None
@@ -45,11 +46,7 @@ class AgentState(BaseModel):
     should_stop: bool = False
     can_generate_answer: bool = True
     answer_generated_from_document_store: Optional[str] = None
-    # Web search state
-    waiting_for_web_search_confirmation: bool = False
-    web_documents: Optional[List[Document]] = None
-    web_search_query: Optional[str] = None
-    pending_web_search_query: Optional[str] = None
+    needs_casual_response: bool = False
 
 class FileProcessingStatus(BaseModel):
     """Model for file processing status."""

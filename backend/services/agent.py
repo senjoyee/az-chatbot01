@@ -12,6 +12,7 @@ from langchain.prompts import PromptTemplate, ChatPromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 from .tools import RetrieverTool
+from backend.utils.helpers import is_casual_conversation
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
@@ -60,63 +61,7 @@ CUSTOMER_NAMES = [
     # Add more customer names here
 ]
 
-def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
-    """
-    Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
-    Returns a tuple of (detected_customers, use_and_operator).
-    """
-    query_lower = query.lower()
-    detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
-    # Check if query implies ALL customers should be included
-    use_and = False
-    if len(detected) > 1:  # Only check for AND if multiple customers detected
-        and_indicators = ['&', ' and ', ' both ', ' all ']
-        use_and = any(indicator in query_lower for indicator in and_indicators)
-
-    return detected, use_and
-
-def detect_customers(query: str) -> List[str]:
-    """
-    Detect customer names in the query string.
-    Returns a list of detected customer names (case-insensitive).
-    """
-    query_lower = query.lower()
-    return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
 # Prompt templates
-
-query_reasoning_template = """
-You are tasked with rewriting a user's query to make it more likely to match relevant documents in a retrieval system. The goal is to transform the query into a more assertive and focused form that will improve search results.
-
-Follow these guidelines when rewriting the query:
-1. Use an assertive tone
-2. Be more specific and detailed
-3. Include relevant keywords
-4. Remove unnecessary words or phrases
-5. Structure the query as a statement rather than a question, if applicable
-6. Maintain the original intent of the query
-
-Here is the user's original query:
-<user_query>
-{question}
-</user_query>
-
-Rewrite the query following the guidelines above. Think carefully about how to improve the query's effectiveness in retrieving relevant documents.
-"""
-QUERY_REASONING_PROMPT = PromptTemplate.from_template(query_reasoning_template)
-
-verification_template = """
-You are a fact-checker assistant. Given the answer provided below and, if available, an excerpt of context from relevant documents, analyze the answer for factual accuracy. Identify any statements that might be inaccurate or hallucinated, and if any inaccuracies are found, provide a revised, accurate summary of the answer. If the answer is fully accurate, simply respond with "No issues found".
-
-Answer:
-{answer}
-
-Context:
-{context}
-"""
-
-VERIFICATION_PROMPT = PromptTemplate.from_template(verification_template)
 
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
@@ -193,47 +138,30 @@ def format_chat_history(chat_history: List[Message]) -> str:
             buffer.append(f"Assistant: {message.content}")
     return "\n".join(buffer)
 
-def check_greeting_and_customer(state: AgentState) -> AgentState:
-    """Handles greetings and conversation flow management."""
-    if state.response:
-        return state
 
-    state.conversation_turns += 1
-    lower_question = state.question.lower()
+def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
+    """
+    Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
+    Returns a tuple of (detected_customers, use_and_operator).
+    """
+    query_lower = query.lower()
+    detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
-    # Greeting pattern definitions
-    greeting_patterns = {
-        'initial': [r'\bhello\b', r'\bhi\b', r'\bhey\b', r'good morning',
-                   r'good afternoon', r'good evening', r'how are you'],
-        'response': [r'\bi\'m good\b', r'\bdoing great\b', r'\bnot bad\b',
-                    r'\bfine thanks\b', r'\bpretty good\b', r'\ball good\b']
-    }
+    # Check if query implies ALL customers should be included
+    use_and = False
+    if len(detected) > 1:  # Only check for AND if multiple customers detected
+        and_indicators = ['&', ' and ', ' both ', ' all ']
+        use_and = any(indicator in query_lower for indicator in and_indicators)
 
-    # Initial greeting handling
-    if state.conversation_turns == 1:
-        for pattern in greeting_patterns['initial']:
-            if re.search(pattern, lower_question):
-                _input = (
-                    RunnableLambda(lambda x: f"Respond to greeting and direct to ask about docs: '{x.question}'")
-                    | llm_4o_mini
-                    | StrOutputParser()
-                )
-                state.response = _input.invoke(state)
-                state.should_stop = True
-                return state
+    return detected, use_and
 
-    # Follow-up casual conversation handling
-    for pattern in greeting_patterns['response']:
-        if re.search(pattern, lower_question):
-            state.response = (
-                "I'm here to help with document-related questions. "
-                "Please ask about specific documents or policies."
-            )
-            state.should_stop = True
-            return state
-
-    state.conversation_turns = 0
-    return state
+def detect_customers(query: str) -> List[str]:
+    """
+    Detect customer names in the query string.
+    Returns a list of detected customer names (case-insensitive).
+    """
+    query_lower = query.lower()
+    return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
@@ -423,11 +351,28 @@ def update_history(state: AgentState) -> AgentState:
     ])
     return state
 
+def detect_casual_talk(state: AgentState) -> AgentState:
+    """Determines if message requires casual response."""
+    state.needs_casual_response = is_casual_conversation(state.message)
+    return state
+
+def respond_to_casual(state: AgentState) -> AgentState:
+    """Generates conversational response using LLM."""
+    state.response = llm.invoke(
+        conversation_prompt.format(
+            message=state.message,
+            history=format_chat_history(state.chat_history)
+        )
+    )
+    state.should_stop = False  # Continue conversation
+    return state
+
 # Build the Langgraph
 builder = StateGraph(AgentState)
 
 # Nodes
-builder.add_node("check_initial", check_greeting_and_customer)
+builder.add_node("detect_casual", detect_casual_talk)
+builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
 builder.add_node("retrieve", retrieve_documents)
@@ -437,10 +382,13 @@ builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
 # Edges
+# First branch: Casual conversation handling
 builder.add_conditional_edges(
-    "check_initial",
-    lambda s: END if s.should_stop else "condense"
+    "detect_casual",
+    lambda s: "respond_casual" if s.needs_casual_response else "condense"
 )
+
+# Main conversation flow
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
@@ -453,14 +401,20 @@ builder.add_conditional_edges(
 builder.add_edge("rerank", "decide_to_generate")
 builder.add_conditional_edges(
     "decide_to_generate",
-    #  Go to generate ONLY if answer was generated from docs
-    lambda s: "generate" if s.answer_generated_from_document_store == "pass" else "update_history"
+    lambda s: "generate" if s.can_generate_answer else "update_history"
 )
 builder.add_edge("generate", "update_history")
-builder.add_edge("update_history", END)
+builder.add_edge("update_history", "detect_casual")
+
+# Final edges for conversation completion
+builder.add_conditional_edges(
+    "detect_casual",
+    lambda s: "respond_casual" if s.needs_casual_response else END
+)
+builder.add_edge("respond_casual", END)
 
 # Set entry point
-builder.set_entry_point("check_initial")
+builder.set_entry_point("detect_casual")
 
 # Compile the graph
 agent = builder.compile()
