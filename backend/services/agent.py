@@ -353,14 +353,14 @@ def update_history(state: AgentState) -> AgentState:
 
 def detect_casual_talk(state: AgentState) -> AgentState:
     """Determines if message requires casual response."""
-    state.needs_casual_response = is_casual_conversation(state.message)
+    state.needs_casual_response = is_casual_conversation(state.question)
     return state
 
 def respond_to_casual(state: AgentState) -> AgentState:
     """Generates conversational response using LLM."""
     state.response = llm.invoke(
         conversation_prompt.format(
-            message=state.message,
+            message=state.question,
             history=format_chat_history(state.chat_history)
         )
     )
