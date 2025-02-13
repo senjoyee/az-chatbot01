@@ -122,7 +122,7 @@ CONVERSATION_PROMPT = PromptTemplate.from_template(
     User Message:
     {message}
 
-    Your response should be brief and friendly. Respond directly without any prefix like 'AI:' or 'Assistant:'."""
+    Your response should be brief and friendly."""
 )
 
 # Prompt for deciding if an answer can be generated
