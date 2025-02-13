@@ -362,6 +362,7 @@ def update_history(state: AgentState) -> AgentState:
         Message(role="user", content=state.question),
         Message(role="assistant", content=state.response)
     ])
+    state.should_stop = True
     return state
 
 def detect_casual_talk(state: AgentState) -> AgentState:
