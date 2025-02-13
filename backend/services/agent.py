@@ -112,6 +112,19 @@ Provide your answer within <answer> tags. If you need to ask for clarification, 
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
+CONVERSATION_PROMPT = PromptTemplate.from_template(
+    """You are a friendly and helpful AI assistant. Respond to the following message in a natural, conversational way.
+    If there is chat history, maintain a consistent and contextual conversation.
+
+    Chat History:
+    {history}
+
+    User Message:
+    {message}
+
+    Your response should be brief and friendly. Respond directly without any prefix like 'AI:' or 'Assistant:'."""
+)
+
 # Prompt for deciding if an answer can be generated
 DECISION_PROMPT = PromptTemplate.from_template(
     """Given the following question and document excerpts, determine if a reasonable answer can be generated.
@@ -359,7 +372,7 @@ def detect_casual_talk(state: AgentState) -> AgentState:
 def respond_to_casual(state: AgentState) -> AgentState:
     """Generates conversational response using LLM."""
     state.response = llm_4o_mini.invoke(
-        conversation_prompt.format(
+        CONVERSATION_PROMPT.format(
             message=state.question,
             history=format_chat_history(state.chat_history)
         )
