@@ -3,6 +3,7 @@ Helper utility functions.
 """
 
 from typing import Dict, Any
+import re
 
 def escape_odata_filter_value(value: str) -> str:
     """
@@ -136,4 +137,5 @@ def is_casual_conversation(message: str, llm=None) -> bool:
     '''
     
     response = llm.invoke(classification_prompt.format(message=message))
-    return response.content.strip().lower() == 'yes'
+    match = re.search(r"<answer>\s*(yes)\s*</answer>", response.content, flags=re.IGNORECASE)
+    return match is not None
