@@ -364,7 +364,7 @@ def respond_to_casual(state: AgentState) -> AgentState:
             history=format_chat_history(state.chat_history)
         )
     ).content
-    state.should_stop = False  # Continue conversation
+    state.should_stop = True  # End conversation after responding
     return state
 
 # Build the Langgraph
