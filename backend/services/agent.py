@@ -3,6 +3,7 @@ from typing import List, Dict, Any
 import torch
 import re
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
+import json
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnablePassthrough, RunnableLambda
@@ -141,6 +142,24 @@ DECISION_PROMPT = PromptTemplate.from_template(
     """
 )
 
+# Customer detection prompt template
+CUSTOMER_DETECTION_PROMPT = """You are a specialized AI. The user question is:
+\"{question}\"
+
+You have a list of known customer names: {customer_names}.
+
+1) If the user is asking about one specific customer name, return "single" and the customer name.
+2) If the user is asking about multiple specific customer names, return "multiple" and the list of names.
+3) If the user is asking about all customers, return "all".
+4) If the user does not mention a customer name at all (or none is relevant), return "none".
+
+Output your response in JSON format only as follows:
+{
+  "interpretation": "<one of: single/multiple/all/none>",
+  "customer_names": [list of customers or empty if none]
+}
+""".strip()
+
 def format_chat_history(chat_history: List[Message]) -> str:
     """Format chat history for the model."""
     buffer = []
@@ -175,6 +194,50 @@ def detect_customers(query: str) -> List[str]:
     """
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
+
+async def detect_customers_llm(state: AgentState) -> AgentState:
+    """
+    Detect customer references in the question using LLM.
+    Returns updated state with customers field set.
+    """
+    try:
+        # Format the prompt with the question and customer list
+        prompt = CUSTOMER_DETECTION_PROMPT.format(
+            question=state.question,
+            customer_names=CUSTOMER_NAMES
+        )
+        
+        # Call LLM to get customer interpretation
+        messages = [{"role": "user", "content": prompt}]
+        response = await llm_4o_mini.ainvoke(messages)
+        
+        # Parse the JSON response
+        try:
+            result = json.loads(response.content)
+            interpretation = result["interpretation"]
+            customer_names = result["customer_names"]
+            
+            # Update state based on interpretation
+            if interpretation == "none":
+                state.customers = None
+            elif interpretation == "all":
+                state.customers = CUSTOMER_NAMES
+            else:  # single or multiple
+                state.customers = customer_names
+                
+        except (json.JSONDecodeError, KeyError) as e:
+            logging.error(f"Error parsing LLM response: {e}")
+            state.customers = None
+            state.should_stop = True
+            state.response = "I'm having trouble understanding which customer you're referring to. Could you please clarify?"
+            
+    except Exception as e:
+        logging.error(f"Error in customer detection: {e}")
+        state.customers = None
+        state.should_stop = True
+        state.response = "I encountered an error while processing your request. Please try again."
+        
+    return state
 
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
@@ -401,6 +464,7 @@ builder.add_node("detect_casual", detect_casual_talk)
 builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
+builder.add_node("detect_customers_llm", detect_customers_llm)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("decide_to_generate", decide_to_generate)
@@ -419,8 +483,9 @@ builder.add_edge("respond_casual", "update_history")
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "retrieve"
+    lambda s: "update_history" if s.should_stop else "detect_customers_llm"
 )
+builder.add_edge("detect_customers_llm", "retrieve")
 builder.add_conditional_edges(
     "retrieve",
     lambda s: "update_history" if s.should_stop else "rerank"

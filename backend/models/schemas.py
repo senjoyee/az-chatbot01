@@ -41,17 +41,9 @@ class AgentState(BaseModel):
     chat_history: List[Message]
     documents: Optional[List[Any]] = None
     response: Optional[str] = None
-    customer: Optional[str] = None
+    customers: Optional[List[str]] = None
     conversation_turns: int = 0
     should_stop: bool = False
     can_generate_answer: bool = True
     answer_generated_from_document_store: Optional[str] = None
     needs_casual_response: bool = False
-
-class FileProcessingStatus(BaseModel):
-    """Model for file processing status."""
-    status: str  # Using str instead of ProcessingStatus to avoid circular imports
-    file_name: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
-    error_message: Optional[str] = None
