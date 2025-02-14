@@ -47,3 +47,4 @@ class AgentState(BaseModel):
     can_generate_answer: bool = True
     answer_generated_from_document_store: Optional[str] = None
     needs_casual_response: bool = False
+    customer_reminder_sent: bool = False

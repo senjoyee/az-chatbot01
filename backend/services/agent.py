@@ -1,17 +1,17 @@
 import logging
 from typing import List, Dict, Any
 import torch
-import re
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import json
+from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
-from langchain_core.runnables import RunnablePassthrough, RunnableLambda
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, END
 from langchain_openai import AzureChatOpenAI
-from langchain.prompts import PromptTemplate, ChatPromptTemplate
+from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
+
 from .tools import RetrieverTool
 from utils.helpers import is_casual_conversation
 
@@ -22,7 +22,7 @@ from config.settings import (
     AZURE_OPENAI_ENDPOINT_SC,
 )
 from config.azure_search import vector_store
-from models.schemas import Message, AgentState  # Import AgentState
+from models.schemas import Message, AgentState
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,6 @@ retriever_tool = RetrieverTool()
 # Constants for reranking
 RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
 
-# Initialize reranking model and tokenizer globally
 logger.info(f"Initializing reranking model: {RERANKER_MODEL_NAME}")
 reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_NAME)
 reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_NAME)
@@ -63,7 +62,6 @@ CUSTOMER_NAMES = [
 ]
 
 # Prompt templates
-
 condense_question_template = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
 Chat History:
 {chat_history}
@@ -80,88 +78,45 @@ First, carefully read and analyze the following documents:
 {context}
 </documents>
 
-As you read through the documents, pay attention to key information, important details, and any specific instructions or clauses that might be relevant to potential user questions. Create a mental index of the main topics and sections within the documents for quick reference.
-
 Now, a user has asked the following question:
 
 <user_question>
 {question}
 </user_question>
 
-To answer the user's question, follow these steps:
-
-1. Identify the main topic(s) of the question and search for relevant information within the provided documents.
-
-2. If you find information directly related to the question, use it to formulate your answer. Be sure to paraphrase the information rather than quoting it verbatim, unless a direct quote is necessary for accuracy or clarity.
-
-3. If the question is not directly addressed in the documents, use your understanding of the overall content to provide the best possible answer. In this case, make it clear that your response is based on your interpretation of the available information.
-
-4. If the question cannot be answered using the provided documents, politely inform the user that the information is not available in the current documentation.
-
-5. If appropriate, provide additional context or related information that might be helpful to the user, even if it doesn't directly answer their question.
-
-6. If the user's question is unclear or too broad, ask for clarification to ensure you provide the most accurate and helpful response.
-
-When formulating your answer, keep the following in mind:
-
-- Be concise and to the point, while still providing comprehensive information.
-- Use clear and simple language, avoiding jargon unless it's specifically relevant to the topic.
-- If discussing technical procedures or contract terms, be precise and accurate.
-- Maintain a professional and helpful tone throughout your response.
-
-Provide your answer within <answer> tags. If you need to ask for clarification, do so before providing your answer. If you're unsure about any part of your response, indicate this clearly to the user.
+Provide your answer within <answer> tags.
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
 CONVERSATION_PROMPT = PromptTemplate.from_template(
     """You are a friendly and helpful AI assistant. Respond to the following message in a natural, conversational way.
-    If there is chat history, maintain a consistent and contextual conversation.
+If there is chat history, maintain a consistent and contextual conversation.
 
-    Chat History:
-    {history}
+Chat History:
+{history}
 
-    User Message:
-    {message}
+User Message:
+{message}
 
-    Your response should be brief and friendly."""
+Your response should be brief and friendly."""
 )
 
-# Prompt for deciding if an answer can be generated
 DECISION_PROMPT = PromptTemplate.from_template(
     """Given the following question and document excerpts, determine if a reasonable answer can be generated.
 
-    <question>
-    {question}
-    </question>
+<question>
+{question}
+</question>
 
-    <documents>
-    {context}
-    </documents>
+<documents>
+{context}
+</documents>
 
-    Respond with 'yes' if a reasonable answer can be generated, or 'no' if not.
-    """
+Respond with 'yes' if a reasonable answer can be generated, or 'no' if not.
+"""
 )
 
-# Customer detection prompt template
-CUSTOMER_DETECTION_PROMPT = """You are a specialized AI. The user question is:
-\"{question}\"
-
-You have a list of known customer names: {customer_names}.
-
-1) If the user is asking about one specific customer name, return "single" and the customer name.
-2) If the user is asking about multiple specific customer names, return "multiple" and the list of names.
-3) If the user is asking about all customers, return "all".
-4) If the user does not mention a customer name at all (or none is relevant), return "none".
-
-Output your response in JSON format only as follows:
-{
-  "interpretation": "<one of: single/multiple/all/none>",
-  "customer_names": [list of customers or empty if none]
-}
-""".strip()
-
 def format_chat_history(chat_history: List[Message]) -> str:
-    """Format chat history for the model."""
     buffer = []
     for message in chat_history:
         if message.role == "user":
@@ -170,23 +125,6 @@ def format_chat_history(chat_history: List[Message]) -> str:
             buffer.append(f"Assistant: {message.content}")
     return "\n".join(buffer)
 
-
-def detect_customers_and_operator(query: str) -> tuple[List[str], bool]:
-    """
-    Detect customer names in the query string and determine if user wants ALL customers (AND) or ANY customer (OR).
-    Returns a tuple of (detected_customers, use_and_operator).
-    """
-    query_lower = query.lower()
-    detected = [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
-    # Check if query implies ALL customers should be included
-    use_and = False
-    if len(detected) > 1:  # Only check for AND if multiple customers detected
-        and_indicators = ['&', ' and ', ' both ', ' all ']
-        use_and = any(indicator in query_lower for indicator in and_indicators)
-
-    return detected, use_and
-
 def detect_customers(query: str) -> List[str]:
     """
     Detect customer names in the query string.
@@ -194,50 +132,6 @@ def detect_customers(query: str) -> List[str]:
     """
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
-async def detect_customers_llm(state: AgentState) -> AgentState:
-    """
-    Detect customer references in the question using LLM.
-    Returns updated state with customers field set.
-    """
-    try:
-        # Format the prompt with the question and customer list
-        prompt = CUSTOMER_DETECTION_PROMPT.format(
-            question=state.question,
-            customer_names=CUSTOMER_NAMES
-        )
-        
-        # Call LLM to get customer interpretation
-        messages = [{"role": "user", "content": prompt}]
-        response = await llm_4o_mini.ainvoke(messages)
-        
-        # Parse the JSON response
-        try:
-            result = json.loads(response.content)
-            interpretation = result["interpretation"]
-            customer_names = result["customer_names"]
-            
-            # Update state based on interpretation
-            if interpretation == "none":
-                state.customers = None
-            elif interpretation == "all":
-                state.customers = CUSTOMER_NAMES
-            else:  # single or multiple
-                state.customers = customer_names
-                
-        except (json.JSONDecodeError, KeyError) as e:
-            logging.error(f"Error parsing LLM response: {e}")
-            state.customers = None
-            state.should_stop = True
-            state.response = "I'm having trouble understanding which customer you're referring to. Could you please clarify?"
-            
-    except Exception as e:
-        logging.error(f"Error in customer detection: {e}")
-        state.customers = None
-        state.should_stop = True
-        state.response = "I encountered an error while processing your request. Please try again."
-        
-    return state
 
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
@@ -258,45 +152,27 @@ def condense_question(state: AgentState) -> AgentState:
     return state
 
 def check_customer_specification(state: AgentState) -> AgentState:
-    # 1. Check for explicit customer mentions
-    if detected := detect_customers(state.question):
+    """
+    Immediately check for customer mentions in the condensed question.
+    If none are found, and a reminder has not yet been sent, set a response
+    reminding the user to specify a customer (only once).
+    """
+    detected = detect_customers(state.question)
+    if detected:
         logger.info(f"Detected customers: {detected}")
-        return state
-
-    # 2. Check chat history (last 3 messages)
-    chat_context = "\n".join([msg.content for msg in state.chat_history[-3:]])
-    if history_customers := detect_customers(chat_context):
-        logger.info(f"Using historical customer context: {history_customers}")
-        state.customer = history_customers[0]  # Take first match
-        return state
-
-    # 3. Check for contact/keyword triggers
-    contact_triggers = {"contacts", "point of contact", "escalation"}
-    if any(trigger in state.question.lower() for trigger in contact_triggers):
-        state.response = "Which customer's contact information are you requesting?"
-        state.should_stop = True
-        return state
-
-    # 4. Final LLM verification
-    prompt = f"""Should this query be handled with customer-specific documents?
-    Query: {state.question}
-    Chat History: {chat_context}
-
-    Answer ONLY yes/no:"""
-
-    customer_response = llm_4o_mini.invoke(prompt)
-    customer_intent = customer_response.content.strip().lower()
-
-    if customer_intent.startswith("yes"):
-        state.response = "Please specify which customer this request pertains to."
-        state.should_stop = True
-
+        state.customers = detected
+    else:
+        if not state.customer_reminder_sent:
+            state.response = f"For more tailored results, please specify a customer. Available customers include: {', '.join(CUSTOMER_NAMES)}."
+            state.customer_reminder_sent = True
+            state.should_stop = True
+        else:
+            state.customers = []
     return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
-        # First step: Retrieve top 25 documents without any filter
         state.documents = retriever_tool.run({
             "query": state.question,
             "k": 25,
@@ -304,50 +180,35 @@ def retrieve_documents(state: AgentState) -> AgentState:
         })
         logger.info(f"Initially retrieved {len(state.documents)} documents")
 
-        # Second step: Apply customer filtering if needed
-        detected_customers, use_and_operator = detect_customers_and_operator(state.question)
-        
-        if detected_customers:
-            # Filter documents based on customer field
+        if state.customers:
             filtered_docs = []
             for doc in state.documents:
                 doc_customer = doc.metadata.get('customer', '').lower()
-                
-                if use_and_operator:
-                    # For AND operator, document must contain all detected customers
-                    if all(customer.lower() in doc_customer for customer in detected_customers):
-                        filtered_docs.append(doc)
-                else:
-                    # For OR operator, document must contain any of the detected customers
-                    if any(customer.lower() in doc_customer for customer in detected_customers):
-                        filtered_docs.append(doc)
-            
+                if any(customer.lower() in doc_customer for customer in state.customers):
+                    filtered_docs.append(doc)
             state.documents = filtered_docs
             logger.info(f"After customer filtering: {len(state.documents)} documents remain")
+        else:
+            logger.info("No customer filtering applied.")
 
-        # --- SHORT-CIRCUIT IF NO DOCUMENTS ---
         if not state.documents:
             state.response = "I could not find any relevant documents in the database."
             state.should_stop = True
-            return state  # Exit early
-
+            return state
     except Exception as e:
         logger.error(f"Error retrieving documents: {str(e)}")
-        state.documents = []  # Ensure we have a valid state even on failure
+        state.documents = []
         state.response = "An error occurred while retrieving documents."
-        state.should_stop = True  # Also stop on error
+        state.should_stop = True
         return state
-
     return state
 
 def rerank_documents(state: AgentState) -> AgentState:
     logger.info("Reranking documents")
     documents = state.documents
-
-    # Check if there are no documents to rerank
     if not documents:
         logger.info("No documents to rerank, skipping reranking step")
-        return state  # No need to raise an exception
+        return state
 
     query = state.question
     text_pairs = [(query, doc.page_content) for doc in documents]
@@ -372,7 +233,6 @@ def rerank_documents(state: AgentState) -> AgentState:
 
 def decide_to_generate(state: AgentState) -> AgentState:
     logger.info("Deciding whether to generate a response")
-
     TOP_K_DOCUMENTS = 10
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
@@ -386,28 +246,22 @@ def decide_to_generate(state: AgentState) -> AgentState:
         | llm_o3_mini
         | StrOutputParser()
     )
-
     response = _input.invoke(state).strip().lower()
     state.can_generate_answer = "yes" in response
 
-    # Set answer_generated_from_document_store and response accordingly
     if state.can_generate_answer:
         state.answer_generated_from_document_store = "pass"
     else:
         state.answer_generated_from_document_store = "fail"
         state.response = "The answer to your query cannot be generated from the documents provided."
-
+        logger.info("Answer generation decision: cannot generate answer")
     logger.info(f"Decision: {state.can_generate_answer}, Document Store Answer: {state.answer_generated_from_document_store}")
     return state
 
-
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
-
-    # Only generate if answer was successfully generated from documents
     if state.answer_generated_from_document_store != "pass":
-        return state  #  Exit if not
-
+        return state
     TOP_K_DOCUMENTS = 10
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
@@ -422,7 +276,6 @@ def generate_response(state: AgentState) -> AgentState:
         | llm_o3_mini
         | StrOutputParser()
     )
-
     response = _input.invoke(state)
     response = response.replace("<answer>", "").replace("</answer>", "").strip()
     state.response = response
@@ -432,7 +285,6 @@ def update_history(state: AgentState) -> AgentState:
     logger.info(f"Updating history with state: {state}")
     if not state.chat_history:
         state.chat_history = []
-
     state.chat_history.extend([
         Message(role="user", content=state.question),
         Message(role="assistant", content=state.response)
@@ -441,51 +293,42 @@ def update_history(state: AgentState) -> AgentState:
     return state
 
 def detect_casual_talk(state: AgentState) -> AgentState:
-    """Determines if message requires casual response."""
     state.needs_casual_response = is_casual_conversation(state.question, llm_4o_mini)
     return state
 
 def respond_to_casual(state: AgentState) -> AgentState:
-    """Generates conversational response using LLM."""
     state.response = llm_4o_mini.invoke(
         CONVERSATION_PROMPT.format(
             message=state.question,
             history=format_chat_history(state.chat_history)
         )
     ).content
-    state.should_stop = True  # End conversation after responding
+    state.should_stop = True
     return state
 
 # Build the Langgraph
 builder = StateGraph(AgentState)
 
-# Nodes
 builder.add_node("detect_casual", detect_casual_talk)
 builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
-builder.add_node("detect_customers_llm", detect_customers_llm)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("decide_to_generate", decide_to_generate)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
-# Edges
-# Handle casual conversation and main flow branching
 builder.add_conditional_edges(
     "detect_casual",
     lambda s: "respond_casual" if s.needs_casual_response else "condense"
 )
-
-# Main conversation flow
 builder.add_edge("respond_casual", "update_history")
 builder.add_edge("condense", "check_customer")
 builder.add_conditional_edges(
     "check_customer",
-    lambda s: "update_history" if s.should_stop else "detect_customers_llm"
+    lambda s: "update_history" if s.should_stop else "retrieve"
 )
-builder.add_edge("detect_customers_llm", "retrieve")
 builder.add_conditional_edges(
     "retrieve",
     lambda s: "update_history" if s.should_stop else "rerank"
@@ -496,21 +339,15 @@ builder.add_conditional_edges(
     lambda s: "generate" if s.can_generate_answer else "update_history"
 )
 builder.add_edge("generate", "update_history")
-
-# Final edge - either continue or end
 builder.add_conditional_edges(
     "update_history",
     lambda s: END if s.should_stop else "detect_casual"
 )
 
-# Set entry point
 builder.set_entry_point("detect_casual")
-
-# Compile the graph
 agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
-    """Runs the Langgraph agent."""
     inputs = {
         "question": question,
         "chat_history": chat_history,
@@ -518,7 +355,8 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
         "response": None,
         "can_generate_answer": True,
         "should_stop": False,
-        "answer_generated_from_document_store": None,  # Initialize correctly
+        "answer_generated_from_document_store": None,
+        "customer_reminder_sent": False,
     }
     try:
         result = await agent.ainvoke(inputs)
