@@ -1,7 +1,6 @@
 import logging
 from typing import List, Dict, Any
 import torch
-import json
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
@@ -135,7 +134,7 @@ def detect_customers(query: str) -> List[str]:
 
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
-    if not state.chat_history:  # Empty history
+    if not state.chat_history:  # Empty history means nothing to condense from
         return state
 
     _input = (
@@ -153,20 +152,31 @@ def condense_question(state: AgentState) -> AgentState:
 
 def check_customer_specification(state: AgentState) -> AgentState:
     """
-    Immediately check for customer mentions in the condensed question.
-    If none are found, and a reminder has not yet been sent, set a response
-    reminding the user to specify a customer (only once).
+    Inspects the (condensed) question for customer names.
+    If a known customer is mentioned the state.customers will be set accordingly.
+    Otherwise, if the input is exactly "all" or "all customers", interpret this as a desire
+    to proceed with no customer filtering. If neither is true and the user hasn’t been reminded yet,
+    then output a one–time reminder and stop further processing.
     """
+    lower_query = state.question.strip().lower()
     detected = detect_customers(state.question)
     if detected:
         logger.info(f"Detected customers: {detected}")
         state.customers = detected
+    elif lower_query in ["all", "all customers"]:
+        logger.info("Received 'all' response; proceeding without customer filter")
+        state.customers = []
+        state.customer_reminder_sent = True
     else:
         if not state.customer_reminder_sent:
-            state.response = f"For more tailored results, please specify a customer. Available customers include: {', '.join(CUSTOMER_NAMES)}."
+            state.response = (
+                f"For more tailored results, please specify a customer. "
+                f"Available customers include: {', '.join(CUSTOMER_NAMES)}."
+            )
             state.customer_reminder_sent = True
             state.should_stop = True
         else:
+            logger.info("No customer specified and reminder already sent; proceeding without filter.")
             state.customers = []
     return state
 
