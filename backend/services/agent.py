@@ -132,9 +132,19 @@ def detect_customers(query: str) -> List[str]:
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
+def was_customer_reminder_sent(chat_history: List[Message]) -> bool:
+    """
+    Check the chat history to determine if a customer reminder has already been issued.
+    """
+    reminder_phrase = "for more tailored results, please specify a customer"
+    for message in chat_history:
+        if message.role == "assistant" and reminder_phrase in message.content.lower():
+            return True
+    return False
+
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
-    if not state.chat_history:  # Empty history means nothing to condense from
+    if not state.chat_history:  # No history to condense from
         return state
 
     _input = (
@@ -153,10 +163,10 @@ def condense_question(state: AgentState) -> AgentState:
 def check_customer_specification(state: AgentState) -> AgentState:
     """
     Inspects the (condensed) question for customer names.
-    If a known customer is mentioned the state.customers will be set accordingly.
-    Otherwise, if the input is exactly "all" or "all customers", interpret this as a desire
-    to proceed with no customer filtering. If neither is true and the user hasn’t been reminded yet,
-    then output a one–time reminder and stop further processing.
+    - If a known customer is mentioned, state.customers will be set accordingly.
+    - If the input is exactly "all" or "all customers", it is interpreted as a desire to proceed without a filter.
+    - Otherwise, if the reminder has not yet been sent (as determined by checking the chat history), output
+      a one‑time reminder and halt further processing.
     """
     lower_query = state.question.strip().lower()
     detected = detect_customers(state.question)
@@ -166,17 +176,15 @@ def check_customer_specification(state: AgentState) -> AgentState:
     elif lower_query in ["all", "all customers"]:
         logger.info("Received 'all' response; proceeding without customer filter")
         state.customers = []
-        state.customer_reminder_sent = True
     else:
-        if not state.customer_reminder_sent:
+        if not was_customer_reminder_sent(state.chat_history):
             state.response = (
                 f"For more tailored results, please specify a customer. "
                 f"Available customers include: {', '.join(CUSTOMER_NAMES)}."
             )
-            state.customer_reminder_sent = True
             state.should_stop = True
         else:
-            logger.info("No customer specified and reminder already sent; proceeding without filter.")
+            logger.info("Customer reminder already sent; proceeding without customer filter.")
             state.customers = []
     return state
 
@@ -287,8 +295,7 @@ def generate_response(state: AgentState) -> AgentState:
         | StrOutputParser()
     )
     response = _input.invoke(state)
-    response = response.replace("<answer>", "").replace("</answer>", "").strip()
-    state.response = response
+    state.response = response.replace("<answer>", "").replace("</answer>", "").strip()
     return state
 
 def update_history(state: AgentState) -> AgentState:
@@ -358,6 +365,7 @@ builder.set_entry_point("detect_casual")
 agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
+    # Note: We no longer rely solely on the in-memory flag since it is reset each turn.
     inputs = {
         "question": question,
         "chat_history": chat_history,
