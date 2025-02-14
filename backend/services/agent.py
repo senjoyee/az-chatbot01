@@ -233,22 +233,34 @@ def check_customer_specification(state: AgentState) -> AgentState:
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
-        # Detect customers and operator type in the query
-        detected_customers, use_and_operator = detect_customers_and_operator(state.question)
-        filters = None
-
-        if detected_customers:
-            filter_conditions = [f"customer eq '{c}'" for c in detected_customers]
-            operator = " and " if use_and_operator else " or "
-            filters = operator.join(filter_conditions)
-            logger.info(f"Applying customer filters with {operator.strip()} operator: {filters}")
-
+        # First step: Retrieve top 25 documents without any filter
         state.documents = retriever_tool.run({
             "query": state.question,
-            "k": 20,
-            "filters": filters
+            "k": 25,
+            "filters": None
         })
-        logger.info(f"Retrieved {len(state.documents)} documents")
+        logger.info(f"Initially retrieved {len(state.documents)} documents")
+
+        # Second step: Apply customer filtering if needed
+        detected_customers, use_and_operator = detect_customers_and_operator(state.question)
+        
+        if detected_customers:
+            # Filter documents based on customer field
+            filtered_docs = []
+            for doc in state.documents:
+                doc_customer = doc.metadata.get('customer', '').lower()
+                
+                if use_and_operator:
+                    # For AND operator, document must contain all detected customers
+                    if all(customer.lower() in doc_customer for customer in detected_customers):
+                        filtered_docs.append(doc)
+                else:
+                    # For OR operator, document must contain any of the detected customers
+                    if any(customer.lower() in doc_customer for customer in detected_customers):
+                        filtered_docs.append(doc)
+            
+            state.documents = filtered_docs
+            logger.info(f"After customer filtering: {len(state.documents)} documents remain")
 
         # --- SHORT-CIRCUIT IF NO DOCUMENTS ---
         if not state.documents:
@@ -298,7 +310,7 @@ def rerank_documents(state: AgentState) -> AgentState:
 def decide_to_generate(state: AgentState) -> AgentState:
     logger.info("Deciding whether to generate a response")
 
-    TOP_K_DOCUMENTS = 12
+    TOP_K_DOCUMENTS = 10
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
 
@@ -333,7 +345,7 @@ def generate_response(state: AgentState) -> AgentState:
     if state.answer_generated_from_document_store != "pass":
         return state  #  Exit if not
 
-    TOP_K_DOCUMENTS = 12
+    TOP_K_DOCUMENTS = 10
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
