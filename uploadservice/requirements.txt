@@ -1,3 +1,9 @@
-streamlit==1.31.1
-azure-storage-blob==12.19.0
-python-dotenv==1.0.1
+streamlit
+azure-storage-blob
+python-dotenv
+pandas
+azure-search-documents
+unstructured[all-docs]
+azure-identity
+python-magic
+
