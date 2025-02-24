@@ -53,7 +53,7 @@ export default function DocumentUploadService() {
         name: file.name,
         size: file.size || 0,
         uploadDate: new Date(file.lastModified || Date.now()),
-        status: file.status || FileProcessingStatus.NOT_STARTED,
+        status: file.status || FileProcessingStatus.COMPLETED, // Default to COMPLETED if status is not provided
         errorMessage: file.errorMessage,
         processingStartTime: file.processingStartTime,
         processingEndTime: file.processingEndTime
@@ -314,6 +314,33 @@ export default function DocumentUploadService() {
                     ))}
                   </TableBody>
                 </Table>
+                {/* Pagination Controls */}
+                <div className="mt-4 flex items-center justify-between">
+                  <div className="text-sm text-muted-foreground">
+                    Showing {files.length} of {totalFiles} files
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      Previous
+                    </Button>
+                    <div className="text-sm">
+                      Page {currentPage} of {totalPages}
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
               </div>
             )
           )}
