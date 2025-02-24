@@ -157,20 +157,36 @@ export default function DocumentUploadService() {
           {filesToUpload.length > 0 && (
             <div className="mt-4">
               <h3 className="text-lg font-semibold mb-2">Files to Upload</h3>
-              {filesToUpload.map((file, index) => (
-                <div key={index} className="mb-2 flex items-center space-x-2">
-                  <File className="h-4 w-4" />
-                  <span className="flex-grow">{file.file.name}</span>
-                  <Input
-                    type="text"
-                    placeholder="Customer Name"
-                    value={file.customerName}
-                    onChange={(e) => handleCustomerNameChange(index, e.target.value)}
-                    className="w-48"
-                  />
-                </div>
-              ))}
-              <Button onClick={handleUpload} disabled={uploading} className="mt-2">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Document Name</TableHead>
+                    <TableHead>Customer Name</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filesToUpload.map((file, index) => (
+                    <TableRow key={index}>
+                      <TableCell className="font-medium">
+                        <div className="flex items-center">
+                          <File className="mr-2 h-4 w-4" />
+                          {file.file.name}
+                        </div>
+                      </TableCell>
+                      <TableCell>
+                        <Input
+                          type="text"
+                          placeholder="Customer Name"
+                          value={file.customerName}
+                          onChange={(e) => handleCustomerNameChange(index, e.target.value)}
+                          className="w-48"
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              <Button onClick={handleUpload} disabled={uploading} className="mt-4">
                 {uploading ? 'Uploading...' : 'Upload Files'}
               </Button>
             </div>
@@ -255,4 +271,3 @@ function formatFileSize(bytes: number) {
   const i = Math.floor(Math.log(bytes) / Math.log(k))
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
-
