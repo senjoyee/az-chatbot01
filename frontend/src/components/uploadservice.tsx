@@ -6,16 +6,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Upload, Trash2, File } from 'lucide-react'
+import { Upload, Trash2, File, Info } from 'lucide-react'
 import { toast } from 'sonner'
-import { uploadFiles, deleteFile, listFiles, FileWithCustomer } from './api'
-
-interface FileItem {
-  id: string
-  name: string
-  size: number
-  uploadDate: Date
-}
+import { uploadFiles, deleteFile, listFiles, getFileStatus, getFilesStatus } from './api'
+import { FileProcessingStatus, FileItem, FileWithCustomer } from './types'
+import { useFileStatusPolling } from './hooks/useFileStatusPolling'
+import { StatusIndicator } from './ui/status-indicator'
+import { FileDetails } from './ui/file-details'
+import { formatFileSize } from './utils'
 
 export default function DocumentUploadService() {
   const [files, setFiles] = useState<FileItem[]>([])
@@ -23,6 +21,7 @@ export default function DocumentUploadService() {
   const [uploading, setUploading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [filesToUpload, setFilesToUpload] = useState<FileWithCustomer[]>([])
+  const [selectedFileDetails, setSelectedFileDetails] = useState<string | null>(null)
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -54,6 +53,10 @@ export default function DocumentUploadService() {
         name: file.name,
         size: file.size || 0,
         uploadDate: new Date(file.lastModified || Date.now()),
+        status: file.status || FileProcessingStatus.NOT_STARTED,
+        errorMessage: file.errorMessage,
+        processingStartTime: file.processingStartTime,
+        processingEndTime: file.processingEndTime
       }))
       
       setFiles(mappedFiles)
@@ -81,29 +84,6 @@ export default function DocumentUploadService() {
   }, [])
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
-
-  const handleUpload = async () => {
-    setUploading(true)
-    try {
-      await uploadFiles(filesToUpload)
-      toast.success('Documents uploaded successfully')
-      fetchFiles(currentPage, pageSize)
-      setFilesToUpload([])
-    } catch (error) {
-      console.error('Error uploading files:', error)
-      let errorMessage = 'Failed to upload documents'
-      if (error instanceof Error) {
-        errorMessage += ': ' + error.message
-      } else if (typeof error === 'string') {
-        errorMessage += ': ' + error
-      } else {
-        errorMessage += ': Unknown error occurred'
-      }
-      toast.error(errorMessage)
-    } finally {
-      setUploading(false)
-    }
-  }
 
   const handleCustomerNameChange = (index: number, customerName: string) => {
     setFilesToUpload(prev => 
@@ -133,6 +113,82 @@ export default function DocumentUploadService() {
     }
   }
 
+  const handleStatusUpdate = useCallback((updates: Record<string, Partial<FileItem>>) => {
+    setFiles(prevFiles => 
+      prevFiles.map(file => {
+        const update = updates[file.name];
+        if (update) {
+          // If status changed to COMPLETED or FAILED, show toast
+          if (
+            (update.status === FileProcessingStatus.COMPLETED || 
+             update.status === FileProcessingStatus.FAILED) && 
+            file.status !== update.status
+          ) {
+            const message = update.status === FileProcessingStatus.COMPLETED
+              ? `File ${file.name} has been processed successfully`
+              : `Failed to process file ${file.name}${update.errorMessage ? `: ${update.errorMessage}` : ''}`;
+            
+            toast[update.status === FileProcessingStatus.COMPLETED ? 'success' : 'error'](message);
+          }
+          
+          return { ...file, ...update };
+        }
+        return file;
+      })
+    );
+  }, []);
+
+  const { isPolling, error: pollingError, startPolling, stopPolling } = useFileStatusPolling({
+    files,
+    onStatusUpdate: handleStatusUpdate,
+    pollingInterval: 10000, // 10 seconds
+    maxRetries: 3
+  });
+
+  // Start polling when files are uploaded
+  useEffect(() => {
+    const pendingFiles = files.filter(file => 
+      file.status === FileProcessingStatus.NOT_STARTED || 
+      file.status === FileProcessingStatus.IN_PROGRESS
+    );
+    
+    if (pendingFiles.length > 0 && !isPolling) {
+      startPolling();
+    }
+  }, [files, isPolling, startPolling]);
+
+  const handleUpload = async () => {
+    setUploading(true)
+    try {
+      await uploadFiles(filesToUpload)
+      toast.success('Documents uploaded successfully')
+      await fetchFiles(currentPage, pageSize)
+      setFilesToUpload([])
+      // Start polling for the newly uploaded files
+      startPolling();
+    } catch (error) {
+      console.error('Error uploading files:', error)
+      let errorMessage = 'Failed to upload documents'
+      if (error instanceof Error) {
+        errorMessage += ': ' + error.message
+      } else if (typeof error === 'string') {
+        errorMessage += ': ' + error
+      } else {
+        errorMessage += ': Unknown error occurred'
+      }
+      toast.error(errorMessage)
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  // Show polling error if it occurs
+  useEffect(() => {
+    if (pollingError) {
+      toast.error(`Error checking file status: ${pollingError.message}`);
+    }
+  }, [pollingError]);
+
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
@@ -141,6 +197,7 @@ export default function DocumentUploadService() {
           <CardDescription>Upload, manage, and delete your documents securely in Azure Blob Storage</CardDescription>
         </CardHeader>
         <CardContent>
+          {/* Dropzone */}
           <div 
             {...getRootProps()} 
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
@@ -154,6 +211,7 @@ export default function DocumentUploadService() {
             </p>
           </div>
 
+          {/* Files to Upload */}
           {filesToUpload.length > 0 && (
             <div className="mt-4">
               <h3 className="text-lg font-semibold mb-2">Files to Upload</h3>
@@ -186,88 +244,90 @@ export default function DocumentUploadService() {
                   ))}
                 </TableBody>
               </Table>
-              <Button onClick={handleUpload} disabled={uploading} className="mt-4">
+              <Button 
+                onClick={handleUpload} 
+                disabled={uploading} 
+                className="mt-4"
+              >
                 {uploading ? 'Uploading...' : 'Upload Files'}
               </Button>
             </div>
           )}
 
+          {/* Uploaded Files */}
           {loading ? (
-            <p className="text-center mt-4">Loading files...</p>
+            <div className="flex justify-center items-center mt-8">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+            </div>
           ) : (
             files.length > 0 && (
-              <Table className="mt-8">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Document Name</TableHead>
-                    <TableHead>Size</TableHead>
-                    <TableHead>Upload Date</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {files.map((file) => (
-                    <TableRow key={file.id}>
-                      <TableCell className="font-medium">
-                        <div className="flex items-center">
-                          <File className="mr-2 h-4 w-4" />
-                          {file.name}
-                        </div>
-                      </TableCell>
-                      <TableCell>{formatFileSize(file.size)}</TableCell>
-                      <TableCell>{file.uploadDate.toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteFile(file.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
+              <div className="mt-8">
+                <h3 className="text-lg font-semibold mb-2">Uploaded Files</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Size</TableHead>
+                      <TableHead>Upload Date</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {files.map((file) => (
+                      <TableRow key={file.id}>
+                        <TableCell className="font-medium">
+                          <div className="flex items-center">
+                            <File className="mr-2 h-4 w-4" />
+                            {file.name}
+                          </div>
+                        </TableCell>
+                        <TableCell>{formatFileSize(file.size)}</TableCell>
+                        <TableCell>{file.uploadDate.toLocaleString()}</TableCell>
+                        <TableCell>
+                          <StatusIndicator 
+                            status={file.status} 
+                            errorMessage={file.errorMessage}
+                          />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setSelectedFileDetails(file.id)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Info className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteFile(file.id)}
+                              className="h-8 w-8 p-0"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
             )
           )}
-
-          {/* Pagination Controls */}
-          <div className="mt-4 flex justify-between items-center">
-            <p className="text-sm text-muted-foreground">
-              Showing {files.length} of {totalFiles} documents
-            </p>
-            <div className="flex space-x-2">
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} 
-                disabled={currentPage === 1}
-              >
-                Previous
-              </Button>
-              <span className="flex items-center">
-                Page {currentPage} of {totalPages}
-              </span>
-              <Button 
-                variant="outline" 
-                onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} 
-                disabled={currentPage === totalPages}
-              >
-                Next
-              </Button>
-            </div>
-          </div>
         </CardContent>
-        <CardFooter>
-          <p className="text-sm text-muted-foreground">
-            {totalFiles} document{totalFiles !== 1 ? 's' : ''} uploaded
-          </p>
-        </CardFooter>
       </Card>
+
+      {/* File Details Dialog */}
+      {selectedFileDetails && (
+        <FileDetails
+          file={files.find(f => f.id === selectedFileDetails)!}
+          open={!!selectedFileDetails}
+          onOpenChange={(open) => !open && setSelectedFileDetails(null)}
+        />
+      )}
     </div>
   )
-}
-
-function formatFileSize(bytes: number) {
-  if (bytes === 0) return '0 Bytes'
-  const k = 1024
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }

@@ -1,3 +1,5 @@
+import { FileProcessingStatus, FileItem, FileWithCustomer } from './types';
+
 const API_BASE_URL = 'https://jscbbackend01.azurewebsites.net';
 
 // Error handling utility
@@ -8,11 +10,6 @@ const handleApiError = (error: any, operation: string) => {
   }
   throw error;
 };
-
-export interface FileWithCustomer {
-  file: File;
-  customerName: string;
-}
 
 export const uploadFiles = async (filesWithCustomers: FileWithCustomer[]) => {
   const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -195,3 +192,43 @@ export const sendMessage = async (
   }
 };
 
+export const getFileStatus = async (filename: string): Promise<{ status: FileProcessingStatus; errorMessage?: string }> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/file_status/${encodeURIComponent(filename)}`, {
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to get file status: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    handleApiError(error, 'getting file status');
+    throw error;
+  }
+};
+
+export const getFilesStatus = async (filenames: string[]): Promise<Record<string, { status: FileProcessingStatus; errorMessage?: string }>> => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/files_status`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ filenames }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Failed to get files status: ${response.status} ${errorText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    handleApiError(error, 'getting files status');
+    throw error;
+  }
+};
