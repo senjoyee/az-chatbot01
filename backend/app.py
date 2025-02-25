@@ -207,7 +207,7 @@ async def process_file_async(event: BlobEvent):
             if event.event_type == "Microsoft.Storage.BlobDeleted":
                 logger.info(f"Processing delete event for file: {file_name}")
                 await delete_from_vector_store(file_name)
-                await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
+                await storage_manager.delete_status(file_name)
                 logger.info(f"Successfully processed delete event for file: {file_name}")
             elif event.event_type == "Microsoft.Storage.BlobCreated":
                 try:
@@ -229,8 +229,9 @@ async def process_file_async(event: BlobEvent):
                     if file_extension == '.pdf':
                         elements = partition_pdf(
                             filename=temp_file_path,
-                            strategy="hi_res",
-                            infer_table_structure=True,
+                            #strategy="hi_res",
+                            #infer_table_structure=True,
+                            strategy="fast",
                             include_metadata=True
                         )
                         logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
