@@ -1,6 +1,6 @@
 import os
-from typing import List, Optional
-from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form
+from typing import List, Optional, Dict, Union
+from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from azure.storage.blob import BlobServiceClient
 from unstructured.partition.docx import partition_docx
@@ -143,42 +143,73 @@ async def delete_file(filename: str):
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/uploadfiles")
-async def upload_files(files: List[UploadFile] = File(...),
-                       customer_names: List[str] = Form(...)):
+async def upload_files(
+    files: List[UploadFile] = File(...),
+    customer_map: str = Form(None)
+):
     results = []
+    
+    # Parse the customer map if provided
+    customer_mapping = {}
+    if customer_map:
+        try:
+            customer_mapping = json.loads(customer_map)
+            logger.info(f"Received customer mapping: {customer_mapping}")
+        except json.JSONDecodeError as e:
+            logger.error(f"Error parsing customer map: {str(e)}")
+    
+    # Debug logging
+    logger.info(f"Received {len(files)} files")
+    for i, file in enumerate(files):
+        logger.info(f"File {i}: {file.filename}")
+        customer = customer_mapping.get(file.filename, "unknown")
+        logger.info(f"Customer for {file.filename}: {customer}")
+    
     # Initialize statuses for all files as NOT_STARTED
     for file in files:
         await storage_manager.update_status(file.filename, ProcessingStatus.NOT_STARTED)
+    
     # Process files sequentially
     for i, file in enumerate(files):
         try:
             await storage_manager.update_status(file.filename, ProcessingStatus.IN_PROGRESS)
-            # Pass the specific customer name for this file
-            customer_name = customer_names[i] if i < len(customer_names) else "unknown"
-            await process_single_file_async(file, customer_name)
-            await storage_manager.update_status(file.filename, ProcessingStatus.COMPLETED)
-            results.append({"filename": file.filename, "status": "success"})
+            
+            # Get the customer name for this file from the mapping
+            customer_name = customer_mapping.get(file.filename, "unknown")
+            logger.info(f"Assigning customer '{customer_name}' to file '{file.filename}'")
+            
+            # Process the file with its customer name
+            MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+            contents = await file.read()
+            if len(contents) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
+                )
+            
+            try:
+                logger.info(f"Uploading file {file.filename} with customer metadata: {customer_name}")
+                container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+                blob_client = container_client.get_blob_client(blob=file.filename)
+                blob_client.upload_blob(contents, overwrite=True, metadata={"customer": customer_name})
+                
+                # Verify metadata was set correctly
+                blob_properties = blob_client.get_blob_properties()
+                logger.info(f"Verified metadata for {file.filename}: customer={blob_properties.metadata.get('customer', 'not set')}")
+                
+                await storage_manager.update_status(file.filename, ProcessingStatus.COMPLETED)
+                results.append({"filename": file.filename, "status": "success"})
+            except Exception as e:
+                logger.error(f"Error uploading file {file.filename}: {str(e)}")
+                await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
+                results.append({"filename": file.filename, "status": "error", "message": str(e)})
+                
         except Exception as e:
+            logger.error(f"Error processing file {file.filename}: {str(e)}")
             await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
             results.append({"filename": file.filename, "status": "error", "message": str(e)})
+    
     return {"results": results}
-
-async def process_single_file_async(file: UploadFile, customer_name: str):
-    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
-    container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-    contents = await file.read()
-    if len(contents) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
-        )
-    try:
-        blob_client = container_client.get_blob_client(blob=file.filename)
-        blob_client.upload_blob(contents, overwrite=True, metadata={"customer": customer_name})
-        return {"uploaded_files": [file.filename]}
-    except Exception as e:
-        logger.error(f"Error uploading file {file.filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Error uploading file {file.filename}: {str(e)}")
 
 @app.post("/process_uploaded_files")
 async def process_uploaded_files(event: BlobEvent):
@@ -204,7 +235,7 @@ async def process_uploaded_files(event: BlobEvent):
 async def process_file_async(event: BlobEvent):
     async with processing_lock:
         file_name = event.file_name
-        logger.info(f"Starting processing for file: {file_name}")
+        logger.info(f"Starting to process file: {file_name}")
         try:
             if event.event_type == "Microsoft.Storage.BlobDeleted":
                 logger.info(f"Processing delete event for file: {file_name}")
@@ -224,6 +255,10 @@ async def process_file_async(event: BlobEvent):
                     container_client = storage_manager.blob_service_client.get_container_client(BLOB_CONTAINER)
                     blob_client = container_client.get_blob_client(blob=file_name)
                     blob_properties = blob_client.get_blob_properties()
+                    
+                    # Log all metadata for debugging
+                    logger.info(f"All metadata for {file_name}: {blob_properties.metadata}")
+                    
                     customer_name = blob_properties.metadata.get("customer", "unknown")
                     logger.info(f"Retrieved customer name from metadata: {customer_name}")
                     file_extension = os.path.splitext(file_name)[1].lower()
@@ -258,6 +293,7 @@ async def process_file_async(event: BlobEvent):
                                 "chunk_number": i + 1,
                                 "customer": customer_name
                             }
+                            logger.info(f"Creating document for chunk {i+1} with metadata: {metadata}")
                             doc = DocumentIn(
                                 page_content=chunk,
                                 metadata={**serialize_metadata(metadata),
@@ -317,6 +353,11 @@ async def index_documents(documents_in: List[DocumentIn]):
         documents_to_index = []
         for document in documents_in:
             try:
+                # Log the document metadata for debugging
+                logger.info(f"Processing document for indexing: ID={document.metadata.get('id', 'unknown')}, "
+                           f"Source={document.metadata.get('source', 'unknown')}, "
+                           f"Customer={document.metadata.get('customer', 'unknown')}")
+                
                 embedding = embeddings.embed_query(document.page_content)
             except Exception as e:
                 logger.error(f"Error generating embedding: {str(e)}")
@@ -332,6 +373,10 @@ async def index_documents(documents_in: List[DocumentIn]):
                 "last_update": document.metadata["last_update"],
                 "contextualized": is_contextualized
             }
+            # Log the final document object for debugging
+            logger.info(f"Document ready for indexing: ID={document_obj['id']}, "
+                       f"Customer={document_obj['customer']}")
+            
             documents_to_index.append(document_obj)
         if documents_to_index:
             result = search_client.upload_documents(documents=documents_to_index)

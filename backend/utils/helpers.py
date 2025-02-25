@@ -51,13 +51,22 @@ def sanitize_id(filename: str) -> str:
 
 def serialize_metadata(metadata: dict) -> dict:
     """Convert metadata values to JSON-serializable format."""
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    logger.info(f"Serializing metadata: {metadata}")
     serialized = {}
     for key, value in metadata.items():
+        if key == 'customer':
+            logger.info(f"Processing customer field: {value}")
+        
         if hasattr(value, 'text'):  # Handle Title objects
             serialized[key] = value.text
         elif isinstance(value, (str, int, float, bool, type(None))):
             serialized[key] = value
         # Skip any other types that can't be serialized
+    
+    logger.info(f"Serialized metadata: {serialized}")
     return serialized
 
 

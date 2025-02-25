@@ -31,10 +31,25 @@ export const uploadFiles = async (filesWithCustomers: FileWithCustomer[]) => {
   }
 
   const formData = new FormData();
-  filesWithCustomers.forEach(({ file, customerName }, index) => {
-    formData.append(`files`, file);
-    formData.append(`customer_names`, customerName);
+  
+  // Create a mapping of filenames to customer names
+  const customerMap = {};
+  filesWithCustomers.forEach(({ file, customerName }) => {
+    customerMap[file.name] = customerName;
   });
+  
+  // Add the customer map as a JSON string
+  formData.append('customer_map', JSON.stringify(customerMap));
+  
+  // Then append all files
+  filesWithCustomers.forEach(({ file }) => {
+    formData.append('files', file);
+  });
+
+  // Add a debug log
+  console.log('Uploading files with customers:', 
+    Object.entries(customerMap).map(([filename, customer]) => 
+      `${filename}: ${customer}`).join(', '));
 
   try {
     const response = await fetch(`${API_BASE_URL}/uploadfiles`, {
