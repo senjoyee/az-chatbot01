@@ -310,7 +310,7 @@ export default function DocumentUploadService() {
                       <TableHead>Name</TableHead>
                       <TableHead>Size</TableHead>
                       <TableHead>Upload Date</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Indexing Status</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
