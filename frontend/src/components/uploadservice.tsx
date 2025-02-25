@@ -226,28 +226,30 @@ export default function DocumentUploadService() {
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
         <CardHeader>
-          <CardTitle>Document Upload Service</CardTitle>
-          <CardDescription>Upload, manage, and delete your documents securely in Azure Blob Storage</CardDescription>
+          <CardTitle className="text-2xl font-medium tracking-tight">Document Upload Service</CardTitle>
+          <CardDescription className="text-base text-muted-foreground">
+            Upload, manage, and delete your documents securely in Azure Blob Storage
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {/* Dropzone */}
           <div 
             {...getRootProps()} 
             className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
-              isDragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground'
+              isDragActive ? 'border-primary bg-primary/10' : 'border-muted-foreground/25'
             }`}
           >
             <input {...getInputProps()} />
-            <Upload className="mx-auto h-12 w-12 text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">
+            <Upload className="mx-auto h-12 w-12 text-muted-foreground/50" />
+            <p className="mt-2 text-sm text-muted-foreground font-medium">
               Drag 'n' drop some documents here, or click to select files
             </p>
           </div>
 
           {/* Files to Upload */}
           {filesToUpload.length > 0 && (
-            <div className="mt-4">
-              <h3 className="text-lg font-semibold mb-2">Files to Upload</h3>
+            <div className="mt-6">
+              <h3 className="text-lg font-medium mb-3">Files to Upload</h3>
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -295,7 +297,7 @@ export default function DocumentUploadService() {
           ) : (
             files.length > 0 && (
               <div className="mt-8">
-                <h3 className="text-lg font-semibold mb-2">Uploaded Files</h3>
+                <h3 className="text-lg font-medium mb-3">Uploaded Files</h3>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -327,8 +329,8 @@ export default function DocumentUploadService() {
                         </TableCell>
                         <TableCell className="font-medium">
                           <div className="flex items-center">
-                            <File className="mr-2 h-4 w-4" />
-                            {file.name}
+                            <File className="mr-2 h-4 w-4 text-muted-foreground/70" />
+                            <span className="truncate">{file.name}</span>
                           </div>
                         </TableCell>
                         <TableCell>{formatFileSize(file.size)}</TableCell>
@@ -375,7 +377,7 @@ export default function DocumentUploadService() {
                   </Button>
                   {/* Pagination Controls */}
                   <div className="flex items-center space-x-2">
-                    <div className="text-sm text-muted-foreground">
+                    <div className="text-sm text-muted-foreground font-medium">
                       Showing {files.length} of {totalFiles} files
                     </div>
                     <Button
