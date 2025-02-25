@@ -33,6 +33,10 @@ export default function DocumentUploadService() {
     fetchFiles(currentPage, pageSize)
   }, [currentPage, pageSize])
 
+  useEffect(() => {
+    setSelectedFiles([]);
+  }, [currentPage]);
+
   const fetchFiles = async (page: number = 1, pageSize: number = 10) => {
     try {
       setLoading(true)
@@ -189,6 +193,35 @@ export default function DocumentUploadService() {
     }
   }, [pollingError]);
 
+  const handleSelectFile = (fileId: string) => {
+    setSelectedFiles(prev => 
+      prev.includes(fileId) 
+        ? prev.filter(id => id !== fileId)
+        : [...prev, fileId]
+    );
+  };
+
+  const handleSelectAllFiles = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectedFiles(event.target.checked ? files.map(file => file.id) : []);
+  };
+
+  const handleDeleteSelected = async () => {
+    if (!selectedFiles.length) return;
+    
+    try {
+      setLoading(true);
+      await Promise.all(selectedFiles.map(fileId => deleteFile(fileId)));
+      toast.success(`${selectedFiles.length} document(s) deleted successfully`);
+      setSelectedFiles([]);
+      await fetchFiles(currentPage, pageSize);
+    } catch (error) {
+      console.error('Error deleting files:', error);
+      toast.error('Failed to delete some documents');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
@@ -266,6 +299,14 @@ export default function DocumentUploadService() {
                 <Table>
                   <TableHeader>
                     <TableRow>
+                      <TableHead className="w-12">
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 rounded border-gray-300"
+                          checked={selectedFiles.length === files.length && files.length > 0}
+                          onChange={handleSelectAllFiles}
+                        />
+                      </TableHead>
                       <TableHead>Name</TableHead>
                       <TableHead>Size</TableHead>
                       <TableHead>Upload Date</TableHead>
@@ -276,6 +317,14 @@ export default function DocumentUploadService() {
                   <TableBody>
                     {files.map((file) => (
                       <TableRow key={file.id}>
+                        <TableCell>
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border-gray-300"
+                            checked={selectedFiles.includes(file.id)}
+                            onChange={() => handleSelectFile(file.id)}
+                          />
+                        </TableCell>
                         <TableCell className="font-medium">
                           <div className="flex items-center">
                             <File className="mr-2 h-4 w-4" />
@@ -314,12 +363,21 @@ export default function DocumentUploadService() {
                     ))}
                   </TableBody>
                 </Table>
-                {/* Pagination Controls */}
+                {/* Delete Selected Button */}
                 <div className="mt-4 flex items-center justify-between">
-                  <div className="text-sm text-muted-foreground">
-                    Showing {files.length} of {totalFiles} files
-                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={handleDeleteSelected}
+                    disabled={selectedFiles.length === 0}
+                  >
+                    Delete Selected ({selectedFiles.length})
+                  </Button>
+                  {/* Pagination Controls */}
                   <div className="flex items-center space-x-2">
+                    <div className="text-sm text-muted-foreground">
+                      Showing {files.length} of {totalFiles} files
+                    </div>
                     <Button
                       variant="outline"
                       size="sm"
