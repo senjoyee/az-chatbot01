@@ -150,10 +150,12 @@ async def upload_files(files: List[UploadFile] = File(...),
     for file in files:
         await storage_manager.update_status(file.filename, ProcessingStatus.NOT_STARTED)
     # Process files sequentially
-    for file in files:
+    for i, file in enumerate(files):
         try:
             await storage_manager.update_status(file.filename, ProcessingStatus.IN_PROGRESS)
-            await process_single_file_async(file, customer_names)
+            # Pass the specific customer name for this file
+            customer_name = customer_names[i] if i < len(customer_names) else "unknown"
+            await process_single_file_async(file, customer_name)
             await storage_manager.update_status(file.filename, ProcessingStatus.COMPLETED)
             results.append({"filename": file.filename, "status": "success"})
         except Exception as e:
@@ -161,7 +163,7 @@ async def upload_files(files: List[UploadFile] = File(...),
             results.append({"filename": file.filename, "status": "error", "message": str(e)})
     return {"results": results}
 
-async def process_single_file_async(file: UploadFile, customer_names: List[str]):
+async def process_single_file_async(file: UploadFile, customer_name: str):
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
     container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
     contents = await file.read()
@@ -172,7 +174,7 @@ async def process_single_file_async(file: UploadFile, customer_names: List[str])
         )
     try:
         blob_client = container_client.get_blob_client(blob=file.filename)
-        blob_client.upload_blob(contents, overwrite=True, metadata={"customer": customer_names[0]})
+        blob_client.upload_blob(contents, overwrite=True, metadata={"customer": customer_name})
         return {"uploaded_files": [file.filename]}
     except Exception as e:
         logger.error(f"Error uploading file {file.filename}: {str(e)}")
