@@ -225,25 +225,4 @@ export const getFileStatus = async (filename: string): Promise<{ status: FilePro
   }
 };
 
-export const getFilesStatus = async (filenames: string[]): Promise<Record<string, { status: FileProcessingStatus; errorMessage?: string }>> => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/files_status`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ filenames }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Failed to get files status: ${response.status} ${errorText}`);
-    }
-
-    return response.json();
-  } catch (error) {
-    handleApiError(error, 'getting files status');
-    throw error;
-  }
-};
+// The getFilesStatus function is no longer needed as we're using listFiles for polling

@@ -57,7 +57,12 @@ export default function DocumentUploadService() {
         name: file.name,
         size: file.size || 0,
         uploadDate: new Date(file.lastModified || Date.now()),
-        status: file.status || FileProcessingStatus.NOT_STARTED,
+        // Convert status string to enum
+        status: file.status ? 
+          (typeof file.status === 'string' ? 
+            FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] : 
+            file.status) : 
+          FileProcessingStatus.NOT_STARTED,
         errorMessage: file.errorMessage,
         processingStartTime: file.processingStartTime,
         processingEndTime: file.processingEndTime
@@ -146,7 +151,9 @@ export default function DocumentUploadService() {
     files,
     onStatusUpdate: handleStatusUpdate,
     pollingInterval: 10000, // 10 seconds
-    maxRetries: 3
+    maxRetries: 3,
+    currentPage,
+    pageSize
   });
 
   // Start polling when files are uploaded

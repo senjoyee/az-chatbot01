@@ -100,19 +100,31 @@ async def list_files(
     try:
         container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
         blob_list = list(container_client.list_blobs())
-        start = (page - 1) * page_size
-        end = start + page_size
-        files = [{
+        
+        # Get all files with their basic information
+        files_info = [{
             "name": blob.name,
             "size": blob.size,
             "lastModified": blob.last_modified.isoformat(),
             "contentType": blob.content_settings.content_type
         } for blob in blob_list]
+        
+        # Get status for all files
+        for file_info in files_info:
+            status, error_message = await storage_manager.get_status(file_info["name"])
+            file_info["status"] = status
+            if error_message:
+                file_info["errorMessage"] = error_message
+        
+        # Apply pagination
+        start = (page - 1) * page_size
+        end = start + page_size
+        
         return {
-            "total_files": len(files),
-            "files": files[start:end],
+            "total_files": len(files_info),
+            "files": files_info[start:end],
             "page": page,
-            "total_pages": (len(files) - 1) // page_size + 1,
+            "total_pages": (len(files_info) - 1) // page_size + 1,
         }
     except Exception as e:
         logger.error(f"Error in list_files: {str(e)}")

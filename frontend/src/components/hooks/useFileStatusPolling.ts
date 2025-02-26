@@ -1,19 +1,23 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { FileProcessingStatus, FileItem } from '../types';
-import { getFilesStatus } from '../api';
+import { listFiles } from '../api';
 
 interface UseFileStatusPollingProps {
   files: FileItem[];
   onStatusUpdate: (updates: Record<string, Partial<FileItem>>) => void;
   pollingInterval?: number;
   maxRetries?: number;
+  currentPage?: number;
+  pageSize?: number;
 }
 
 export const useFileStatusPolling = ({
   files,
   onStatusUpdate,
   pollingInterval = 10000, // 10 seconds default
-  maxRetries = 3
+  maxRetries = 3,
+  currentPage = 1,
+  pageSize = 10
 }: UseFileStatusPollingProps) => {
   const [isPolling, setIsPolling] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -45,22 +49,36 @@ export const useFileStatusPolling = ({
     }
 
     try {
-      const fileNames = pendingFiles.map(file => file.name);
-      const statusUpdates = await getFilesStatus(fileNames);
+      // Use listFiles to get the current status of all files
+      const response = await listFiles(currentPage, pageSize);
+      
+      if (!response || !Array.isArray(response.files)) {
+        throw new Error('Invalid response from server');
+      }
       
       // Process updates and track retries
       const updates: Record<string, Partial<FileItem>> = {};
       
-      Object.entries(statusUpdates).forEach(([fileName, status]) => {
-        updates[fileName] = {
-          status: status.status,
-          errorMessage: status.errorMessage
-        };
+      response.files.forEach((file: any) => {
+        // Only process files that we're currently tracking
+        const pendingFile = pendingFiles.find(pf => pf.name === file.name);
+        if (pendingFile) {
+          const status = file.status ? 
+            (typeof file.status === 'string' ? 
+              FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] : 
+              file.status) : 
+            FileProcessingStatus.NOT_STARTED;
+            
+          updates[file.name] = {
+            status: status,
+            errorMessage: file.errorMessage
+          };
 
-        // Reset retry count on successful status update
-        if (status.status === FileProcessingStatus.COMPLETED || 
-            status.status === FileProcessingStatus.FAILED) {
-          delete retryCountRef.current[fileName];
+          // Reset retry count on successful status update
+          if (status === FileProcessingStatus.COMPLETED || 
+              status === FileProcessingStatus.FAILED) {
+            delete retryCountRef.current[file.name];
+          }
         }
       });
 
@@ -95,7 +113,7 @@ export const useFileStatusPolling = ({
         timeoutRef.current = setTimeout(pollFileStatuses, nextInterval);
       }
     }
-  }, [getPendingFiles, onStatusUpdate, pollingInterval, maxRetries, stopPolling]);
+  }, [getPendingFiles, onStatusUpdate, pollingInterval, maxRetries, stopPolling, currentPage, pageSize]);
 
   const startPolling = useCallback(() => {
     if (!isPolling && getPendingFiles().length > 0) {
