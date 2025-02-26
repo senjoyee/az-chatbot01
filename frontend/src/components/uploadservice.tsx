@@ -57,7 +57,7 @@ export default function DocumentUploadService() {
         name: file.name,
         size: file.size || 0,
         uploadDate: new Date(file.lastModified || Date.now()),
-        status: file.status || FileProcessingStatus.COMPLETED, // Default to COMPLETED if status is not provided
+        status: file.status || FileProcessingStatus.NOT_STARTED,
         errorMessage: file.errorMessage,
         processingStartTime: file.processingStartTime,
         processingEndTime: file.processingEndTime
