@@ -52,21 +52,26 @@ export default function DocumentUploadService() {
         throw new Error('Invalid response format - files property is not an array')
       }
       
-      const mappedFiles = response.files.map((file: any) => ({
-        id: file.name,
-        name: file.name,
-        size: file.size || 0,
-        uploadDate: new Date(file.lastModified || Date.now()),
-        // Convert status string to enum
-        status: file.status ? 
-          (typeof file.status === 'string' ? 
-            FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] : 
-            file.status) : 
-          FileProcessingStatus.NOT_STARTED,
-        errorMessage: file.errorMessage,
-        processingStartTime: file.processingStartTime,
-        processingEndTime: file.processingEndTime
-      }))
+      const mappedFiles = response.files.map((file: any) => {
+        // Debug log to see the raw status value
+        console.log(`File ${file.name} status:`, file.status, typeof file.status);
+        
+        return {
+          id: file.name,
+          name: file.name,
+          size: file.size || 0,
+          uploadDate: new Date(file.lastModified || Date.now()),
+          // Convert status string to enum
+          status: file.status ? 
+            (typeof file.status === 'string' ? 
+              FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] : 
+              file.status) : 
+            FileProcessingStatus.NOT_STARTED,
+          errorMessage: file.errorMessage,
+          processingStartTime: file.processingStartTime,
+          processingEndTime: file.processingEndTime
+        };
+      })
       
       setFiles(mappedFiles)
       setTotalFiles(response.total_files || 0)

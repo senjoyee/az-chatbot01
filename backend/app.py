@@ -112,6 +112,7 @@ async def list_files(
         # Get status for all files
         for file_info in files_info:
             status, error_message = await storage_manager.get_status(file_info["name"])
+            logger.info(f"File {file_info['name']} status: {status} (type: {type(status)})")
             file_info["status"] = status
             if error_message:
                 file_info["errorMessage"] = error_message

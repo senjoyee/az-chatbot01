@@ -63,9 +63,19 @@ export const useFileStatusPolling = ({
         // Only process files that we're currently tracking
         const pendingFile = pendingFiles.find(pf => pf.name === file.name);
         if (pendingFile) {
+          // Helper function to convert backend status to frontend enum
+          const convertStatus = (statusStr: string): FileProcessingStatus => {
+            // Convert snake_case to UPPER_CASE
+            const upperCaseStatus = statusStr.toUpperCase();
+            
+            // Map to the enum or default to NOT_STARTED
+            return FileProcessingStatus[upperCaseStatus as keyof typeof FileProcessingStatus] || 
+                   FileProcessingStatus.NOT_STARTED;
+          };
+          
           const status = file.status ? 
             (typeof file.status === 'string' ? 
-              FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] : 
+              convertStatus(file.status) : 
               file.status) : 
             FileProcessingStatus.NOT_STARTED;
             
