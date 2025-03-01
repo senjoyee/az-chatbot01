@@ -178,8 +178,11 @@ export default function DocumentUploadService() {
     try {
       await uploadFiles(filesToUpload)
       toast.success('Documents uploaded successfully')
+      
+      // Fetch the files with their initial NOT_STARTED status
       await fetchFiles(currentPage, pageSize)
       setFilesToUpload([])
+      
       // Start polling for the newly uploaded files
       startPolling();
     } catch (error) {

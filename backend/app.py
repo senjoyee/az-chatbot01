@@ -210,7 +210,8 @@ async def upload_files(
                 blob_properties = blob_client.get_blob_properties()
                 logger.info(f"Verified metadata for {file.filename}: customer={blob_properties.metadata.get('customer', 'not set')}")
                 
-                await storage_manager.update_status(file.filename, ProcessingStatus.COMPLETED)
+                # Keep status as NOT_STARTED so it can be processed asynchronously
+                # The status will change to IN_PROGRESS and then COMPLETED during processing
                 results.append({"filename": file.filename, "status": "success"})
             except Exception as e:
                 logger.error(f"Error uploading file {file.filename}: {str(e)}")
@@ -256,6 +257,10 @@ async def process_file_async(event: BlobEvent):
                 await storage_manager.delete_status(file_name)
                 logger.info(f"Successfully processed delete event for file: {file_name}")
             elif event.event_type == "Microsoft.Storage.BlobCreated":
+                # Set status to IN_PROGRESS at the beginning of processing
+                await storage_manager.update_status(file_name, ProcessingStatus.IN_PROGRESS)
+                logger.info(f"Updated status for {file_name} to IN_PROGRESS")
+                
                 try:
                     await delete_from_vector_store(file_name)
                     logger.info(f"Cleaned up existing chunks for {file_name}")

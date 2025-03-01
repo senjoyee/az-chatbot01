@@ -37,7 +37,7 @@ class AzureStorageManager:
 
     async def check_and_acquire_processing_lock(self, container_name: str, blob_name: str) -> tuple[bool, Optional[str]]:
         """
-        Check if a file is being processed and try to acquire a lock.
+        Check if a file is being processed.
         Returns (can_process, error_message)
         """
         try:
@@ -46,8 +46,7 @@ class AzureStorageManager:
             if status == ProcessingStatus.IN_PROGRESS:
                 return False, "File is already being processed"
 
-            # Update status to IN_PROGRESS
-            await self.update_status(blob_name, ProcessingStatus.IN_PROGRESS)
+            # We don't update the status here anymore - that's done explicitly in process_file_async
             return True, None
 
         except Exception as e:
