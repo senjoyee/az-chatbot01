@@ -184,44 +184,44 @@ async def upload_files(
     
     # Process files sequentially
     for i, file in enumerate(files):
-    try:
-        # DO NOT update the status here; leave it as NOT_STARTED for asynchronous processing.
-        # await storage_manager.update_status(file.filename, ProcessingStatus.IN_PROGRESS)
-        
-        # Get the customer name for this file from the mapping
-        customer_name = customer_mapping.get(file.filename, "unknown")
-        logger.info(f"Assigning customer '{customer_name}' to file '{file.filename}'")
-        
-        # Process the file with its customer name
-        MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
-        contents = await file.read()
-        if len(contents) > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=413,
-                detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
-            )
-        
         try:
-            logger.info(f"Uploading file {file.filename} with customer metadata: {customer_name}")
-            container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-            blob_client = container_client.get_blob_client(blob=file.filename)
-            blob_client.upload_blob(contents, overwrite=True, metadata={"customer": customer_name})
+            # DO NOT update the status here; leave it as NOT_STARTED for asynchronous processing.
+            # await storage_manager.update_status(file.filename, ProcessingStatus.IN_PROGRESS)
             
-            # Verify metadata was set correctly
-            blob_properties = blob_client.get_blob_properties()
-            logger.info(f"Verified metadata for {file.filename}: customer={blob_properties.metadata.get('customer', 'not set')}")
+            # Get the customer name for this file from the mapping
+            customer_name = customer_mapping.get(file.filename, "unknown")
+            logger.info(f"Assigning customer '{customer_name}' to file '{file.filename}'")
             
-            # Leave the status as NOT_STARTED so it can be processed asynchronously later
-            results.append({"filename": file.filename, "status": "success"})
+            # Process the file with its customer name
+            MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
+            contents = await file.read()
+            if len(contents) > MAX_FILE_SIZE:
+                raise HTTPException(
+                    status_code=413,
+                    detail=f"File {file.filename} exceeds maximum size of {MAX_FILE_SIZE/(1024*1024)}MB"
+                )
+            
+            try:
+                logger.info(f"Uploading file {file.filename} with customer metadata: {customer_name}")
+                container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
+                blob_client = container_client.get_blob_client(blob=file.filename)
+                blob_client.upload_blob(contents, overwrite=True, metadata={"customer": customer_name})
+                
+                # Verify metadata was set correctly
+                blob_properties = blob_client.get_blob_properties()
+                logger.info(f"Verified metadata for {file.filename}: customer={blob_properties.metadata.get('customer', 'not set')}")
+                
+                # Leave the status as NOT_STARTED so it can be processed asynchronously later
+                results.append({"filename": file.filename, "status": "success"})
+            except Exception as e:
+                logger.error(f"Error uploading file {file.filename}: {str(e)}")
+                await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
+                results.append({"filename": file.filename, "status": "error", "message": str(e)})
+                
         except Exception as e:
-            logger.error(f"Error uploading file {file.filename}: {str(e)}")
+            logger.error(f"Error processing file {file.filename}: {str(e)}")
             await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
             results.append({"filename": file.filename, "status": "error", "message": str(e)})
-            
-    except Exception as e:
-        logger.error(f"Error processing file {file.filename}: {str(e)}")
-        await storage_manager.update_status(file.filename, ProcessingStatus.FAILED)
-        results.append({"filename": file.filename, "status": "error", "message": str(e)})
     
     return {"results": results}
 
