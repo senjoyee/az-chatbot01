@@ -132,16 +132,6 @@ def detect_customers(query: str) -> List[str]:
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
 
-def was_customer_reminder_sent(chat_history: List[Message]) -> bool:
-    """
-    Check the chat history to determine if a customer reminder has already been issued.
-    """
-    reminder_phrase = "for more tailored results, please specify a customer"
-    for message in chat_history:
-        if message.role == "assistant" and reminder_phrase in message.content.lower():
-            return True
-    return False
-
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
     if not state.chat_history:  # No history to condense from
@@ -164,28 +154,15 @@ def check_customer_specification(state: AgentState) -> AgentState:
     """
     Inspects the (condensed) question for customer names.
     - If a known customer is mentioned, state.customers will be set accordingly.
-    - If the input is exactly "all" or "all customers", it is interpreted as a desire to proceed without a filter.
-    - Otherwise, if the reminder has not yet been sent (as determined by checking the chat history), output
-      a one‑time reminder and halt further processing.
+    - Otherwise, proceed without customer filter.
     """
-    lower_query = state.question.strip().lower()
     detected = detect_customers(state.question)
     if detected:
         logger.info(f"Detected customers: {detected}")
         state.customers = detected
-    elif lower_query in ["all", "all customers"]:
-        logger.info("Received 'all' response; proceeding without customer filter")
-        state.customers = []
     else:
-        if not was_customer_reminder_sent(state.chat_history):
-            state.response = (
-                f"For more tailored results, please specify a customer. "
-                f"Available customers include: {', '.join(CUSTOMER_NAMES)}."
-            )
-            state.should_stop = True
-        else:
-            logger.info("Customer reminder already sent; proceeding without customer filter.")
-            state.customers = []
+        logger.info("No customer specified; proceeding without customer filter.")
+        state.customers = []
     return state
 
 def retrieve_documents(state: AgentState) -> AgentState:
