@@ -2,14 +2,17 @@ from typing import List, Optional, Dict, Any, ClassVar
 from langchain_core.tools import BaseTool
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
+import logging
 
 from config.azure_search import vector_store
+
+logger = logging.getLogger(__name__)
 
 class RetrieverInput(BaseModel):
     """Input for the retriever tool."""
     query: str = Field(..., description="The query to search for")
     k: int = Field(default=10, description="Number of documents to retrieve")
-    filter: Optional[Dict[str, Any]] = Field(default=None, description="Optional filters to apply")
+    filter: Optional[str] = Field(default=None, description="Optional filter expression to apply")
 
 class RetrieverTool(BaseTool):
     """Tool for retrieving documents using hybrid search."""
@@ -19,16 +22,31 @@ class RetrieverTool(BaseTool):
     Input should be a natural language query."""
     args_schema: ClassVar[type[BaseModel]] = RetrieverInput
 
-    def _run(self, query: str, k: int = 10, filters: Optional[Dict[str, Any]] = None) -> List[Document]:
+    def _run(self, query: str, k: int = 10, filters: Optional[str] = None) -> List[Document]:
         """Run the tool."""
         try:
+            logger.info(f"Executing retriever with query: '{query}', k: {k}, filters: '{filters}'")
+            
+            # Debug the filter format
+            if filters:
+                logger.info(f"Filter type: {type(filters)}, value: {filters}")
+            
+            # Execute the search with filters
             documents = vector_store.hybrid_search(
                 query,
                 k=k,
-                filters=filters
+                filters=filters  # Use filter parameter instead of filters
             )
+            
+            # Log the results
+            logger.info(f"Retrieved {len(documents)} documents")
+            for i, doc in enumerate(documents):
+                source = doc.metadata.get('source', 'unknown')
+                logger.info(f"Document {i+1}: source={source}")
+            
             return documents
         except Exception as e:
+            logger.error(f"Error retrieving documents: {str(e)}")
             raise RuntimeError(f"Error retrieving documents: {str(e)}")
 
 

@@ -51,7 +51,8 @@ export default function Component() {
       // Use the sendMessage API function instead of direct fetch
       const data = await sendMessage(userMessage.text, messages, selectedFiles);
 
-      if (!data.answer) {  
+      if (!data || !data.answer) {  
+        console.error("Invalid response format:", data);
         throw new Error('Invalid response format')  
       }  
 

@@ -201,8 +201,7 @@ export const sendMessage = async (
       throw new Error(`Error: ${response.status} - ${errorText}`);
     }
 
-    const data = await response.json();
-    return data.answer;
+    return await response.json();
   } catch (error) {
     handleApiError(error, 'message sending');
     throw error;
