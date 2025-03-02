@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Alert, AlertDescription } from "@/components/ui/alert"  
 import { FileSidebar } from "@/components/ui/file-sidebar"
 import ReactMarkdown from 'react-markdown'  
+import { sendMessage } from "./api";  
 
 interface Message {  
   id: number  
@@ -34,46 +35,21 @@ export default function Component() {
 
   const handleSend = async () => {  
     if (!input.trim() || loading || selectedFiles.length === 0) return  
-
-    const userMessage = {   
-      id: messages.length + 1,   
-      text: input.trim(),   
+    
+    const userMessage = {  
+      id: messages.length + 1,  
+      text: input,  
       sender: 'user' as const  
     }  
-
+    
     setMessages(prev => [...prev, userMessage])  
     setInput('')  
-    setLoading(true)  
     setError(null)  
-
+    setLoading(true)  
+    
     try {  
-      // Include selected files in the request
-      const requestBody = {  
-        question: userMessage.text,  
-        conversation: {  
-          conversation: messages.map(msg => ({  
-            role: msg.sender,  
-            content: msg.text,  
-            id: msg.id  
-          }))  
-        },
-        files: selectedFiles  // Always include selected files
-      }
-
-      const response = await fetch('https://jscbbackend01.azurewebsites.net/conversation', {  
-        method: 'POST',  
-        headers: {  
-          'Content-Type': 'application/json',  
-        },  
-        body: JSON.stringify(requestBody),  
-      })  
-
-      if (!response.ok) {  
-        const errorText = await response.text();  
-        throw new Error(`Error: ${response.status} - ${errorText}`);  
-      }  
-
-      const data = await response.json()  
+      // Use the sendMessage API function instead of direct fetch
+      const data = await sendMessage(userMessage.text, messages, selectedFiles);
 
       if (!data.answer) {  
         throw new Error('Invalid response format')  

@@ -16,6 +16,7 @@ class ConversationRequest(BaseModel):
     """Model for conversation requests."""
     question: str
     conversation: Conversation
+    files: Optional[List[str]] = None
 
 class DocumentIn(BaseModel):
     """Model for document input."""

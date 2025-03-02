@@ -174,7 +174,8 @@ export interface Message {
 
 export const sendMessage = async (
   question: string,
-  conversation: Message[]
+  conversation: Message[],
+  selectedFiles: string[] = []
 ) => {
   try {
     const response = await fetch(`${API_BASE_URL}/conversation`, {
@@ -190,7 +191,8 @@ export const sendMessage = async (
             role: msg.sender === 'user' ? 'user' : 'assistant',
             content: msg.text
           }))
-        }
+        },
+        files: selectedFiles
       }),
     });
 
