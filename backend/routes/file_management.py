@@ -112,43 +112,59 @@ async def process_uploaded_files(event: BlobEvent):
         await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-@router.get("/listfiles")
+@router.get("/files")
 async def list_files(
     page: int = Query(1, ge=1),
     page_size: int = Query(10, ge=1, le=100),
 ):
     try:
         container_client = blob_service_client.get_container_client(BLOB_CONTAINER)
-        blob_list = list(container_client.list_blobs())
+        blobs = container_client.list_blobs()
         
-        # Get all files with their basic information
-        files_info = [{
-            "name": blob.name,
-            "size": blob.size,
-            "lastModified": blob.last_modified.isoformat(),
-            "contentType": blob.content_settings.content_type
-        } for blob in blob_list]
+        # Get all statuses
+        all_statuses = await storage_manager.get_all_statuses()
+        status_dict = {status["file_name"]: status for status in all_statuses}
         
-        # Get status for all files
-        for file_info in files_info:
-            status, error_message = await storage_manager.get_status(file_info["name"])
-            logger.info(f"File {file_info['name']} status: {status} (type: {type(status)})")
-            file_info["status"] = status
-            if error_message:
-                file_info["errorMessage"] = error_message
+        # Build file list with statuses
+        file_list = []
+        for blob in blobs:
+            file_name = blob.name
+            status_info = status_dict.get(file_name, {})
+            
+            # Ensure all date fields are strings
+            for field in ["last_updated", "start_time", "end_time"]:
+                if field in status_info and status_info[field] is not None:
+                    status_info[field] = str(status_info[field])
+            
+            file_info = {
+                "name": file_name,
+                "size": blob.size,
+                "content_type": blob.content_settings.content_type,
+                "last_modified": blob.last_modified.isoformat() if blob.last_modified else None,
+                "status": status_info.get("status", ProcessingStatus.NOT_STARTED.value),
+                "error_message": status_info.get("error_message", ""),
+                "processing_start_time": status_info.get("start_time"),
+                "processing_end_time": status_info.get("end_time")
+            }
+            file_list.append(file_info)
         
-        # Apply pagination
-        start = (page - 1) * page_size
-        end = start + page_size
+        # Sort by last_modified (newest first)
+        file_list.sort(key=lambda x: x["last_modified"] if x["last_modified"] else "", reverse=True)
+        
+        # Paginate
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        paginated_files = file_list[start_idx:end_idx]
         
         return {
-            "total_files": len(files_info),
-            "files": files_info[start:end],
+            "total": len(file_list),
             "page": page,
-            "total_pages": (len(files_info) - 1) // page_size + 1,
+            "page_size": page_size,
+            "total_pages": (len(file_list) + page_size - 1) // page_size,
+            "files": paginated_files
         }
     except Exception as e:
-        logger.error(f"Error in list_files: {str(e)}")
+        logger.error(f"Error listing files: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/deletefile/{filename}")

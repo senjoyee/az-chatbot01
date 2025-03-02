@@ -71,6 +71,15 @@ class AzureStorageManager:
                 entity["EndTime"] = None
             # Set end time when completing or failing
             elif status in [ProcessingStatus.COMPLETED, ProcessingStatus.FAILED]:
+                # Try to get existing entity to preserve StartTime
+                try:
+                    existing_entity = await asyncio.to_thread(self.table_client.get_entity, "FileStatus", file_name)
+                    if "StartTime" in existing_entity:
+                        entity["StartTime"] = existing_entity["StartTime"]
+                except Exception:
+                    # If no existing entity, that's fine
+                    pass
+                
                 entity["EndTime"] = now.isoformat()
             # Reset times when going back to NOT_STARTED
             elif status == ProcessingStatus.NOT_STARTED:

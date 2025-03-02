@@ -1,6 +1,7 @@
 from fastapi import APIRouter, HTTPException, Query
-from typing import Optional
+from typing import Optional, Dict, Any
 import logging
+import json
 
 from models.schemas import FileProcessingStatus
 from models.enums import ProcessingStatus
@@ -27,10 +28,19 @@ async def get_file_statuses(
 ):
     try:
         all_statuses = await storage_manager.get_all_statuses(status_filter)
+        
+        # Convert all statuses to a serializable format
+        for status in all_statuses:
+            # Ensure all date fields are strings
+            for field in ["last_updated", "start_time", "end_time"]:
+                if field in status and status[field] is not None:
+                    status[field] = str(status[field])
+        
         all_statuses.sort(key=lambda x: x["last_updated"], reverse=True)
         start_idx = (page - 1) * page_size
         end_idx = start_idx + page_size
         paginated_statuses = all_statuses[start_idx:end_idx]
+        
         return {
             "total": len(all_statuses),
             "page": page,

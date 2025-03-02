@@ -32,8 +32,8 @@ class FileProcessingStatus(BaseModel):
     """Model for file processing status."""
     status: str  # Using str instead of ProcessingStatus to avoid circular imports
     file_name: str
-    start_time: Optional[datetime] = None
-    end_time: Optional[datetime] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
     error_message: Optional[str] = None
 
 class AgentState(BaseModel):
