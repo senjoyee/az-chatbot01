@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - selective-search
+      - clean-code
     paths:
       - 'backend/**'
       - '.github/workflows/backend-deploy.yml'
