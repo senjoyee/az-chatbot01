@@ -105,18 +105,18 @@ export default function Component() {
   }
 
   return (  
-    <div className="flex h-screen bg-gradient-to-br from-gray-100 to-gray-200">  
+    <div className="flex h-screen bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">  
       {/* File Sidebar */}
       <FileSidebar onFileSelectionChange={handleFileSelectionChange} />
       
       {/* Chat Area */}
-      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex-1 flex items-center justify-center p-4 overflow-hidden">
         <div className="relative w-full h-full max-w-6xl rounded-lg bg-white shadow-2xl overflow-hidden">  
           <div className="flex flex-col h-full relative z-10">  
             <div className="bg-primary text-primary-foreground p-6">  
               <h2 className="text-2xl font-semibold font-mono">Document Assistant</h2>  
               {selectedFiles.length > 0 && (
-                <p className="text-sm mt-1 text-primary-foreground/80">
+                <p className="text-sm mt-1 text-primary-foreground/80 font-mono">
                   {selectedFiles.length} file(s) selected for context
                 </p>
               )}
@@ -200,24 +200,24 @@ export default function Component() {
                   placeholder="Type your message..."  
                   value={input}  
                   onChange={(e) => setInput(e.target.value)}  
-                  onKeyPress={(e) => e.key === 'Enter' && handleSend()}  
+                  onKeyDown={(e) => {  
+                    if (e.key === 'Enter' && !e.shiftKey) {  
+                      e.preventDefault()  
+                      handleSend()  
+                    }  
+                  }}  
+                  className="flex-1 font-mono"  
                   disabled={loading}  
-                  className="flex-grow text-base rounded-full font-mono"  
                 />  
-                <Button   
-                  onClick={handleSend}   
-                  size="icon"   
-                  className="rounded-full"  
-                  disabled={loading || !input.trim()}  
-                >  
-                  <Send className="h-5 w-5" />  
-                  <span className="sr-only">Send</span>  
+                <Button onClick={handleSend} disabled={loading || !input.trim()}>  
+                  <Send className="h-4 w-4 mr-2" />  
+                  Send  
                 </Button>  
               </div>  
             </div>  
           </div>  
         </div>  
-      </div>
+      </div>  
     </div>  
   )  
 }
