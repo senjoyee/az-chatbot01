@@ -229,9 +229,18 @@ def rerank_documents(state: AgentState) -> AgentState:
     with torch.no_grad():
         scores = reranker_model(**inputs).logits.squeeze()
 
+    # Handle case when scores is a single float (only one document)
+    if isinstance(scores, float) or (torch.is_tensor(scores) and scores.dim() == 0):
+        logger.info("Only one document found, no reranking needed")
+        return state
+        
     if torch.is_tensor(scores):
         scores = scores.tolist()
 
+    # Ensure scores is iterable before zipping
+    if not hasattr(scores, '__iter__'):
+        scores = [scores]
+        
     scored_docs = list(zip(documents, scores))
     scored_docs.sort(key=lambda x: x[1], reverse=True)
     state.documents = [doc for doc, _ in scored_docs]
