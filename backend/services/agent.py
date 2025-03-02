@@ -169,20 +169,25 @@ def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
         # Build filters based on available criteria
-        filters = {}
+        filters = None
+        filter_expressions = []
         
         # Add customer filter if customers are detected
         if state.customers:
-            filters["customer"] = state.customers
+            customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
+            filter_expressions.append(f"({customer_filters})")
             logger.info(f"Adding customer filter: {state.customers}")
             
         # Add file filter if files are selected
         if state.selected_files:
-            filters["source"] = state.selected_files
+            file_filters = " or ".join([f"source eq '{file}'" for file in state.selected_files])
+            filter_expressions.append(f"({file_filters})")
             logger.info(f"Adding file filter: {state.selected_files}")
             
-        # If no filters, pass None to get all documents
-        filters = filters if filters else None
+        # Combine filters with AND if both are present
+        if filter_expressions:
+            filters = " and ".join(filter_expressions)
+            logger.info(f"Combined filter expression: {filters}")
         
         state.documents = retriever_tool.run({
             "query": state.question,
