@@ -192,7 +192,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
         state.documents = retriever_tool.run({
             "query": state.question,
             "k": 25,
-            "filter": filter_expression
+            "filters": filter_expression
         })
         
         logger.info(f"Retrieved {len(state.documents)} documents with filter: {filter_expression}")
