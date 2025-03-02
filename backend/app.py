@@ -83,9 +83,13 @@ async def ask_question(request: ConversationRequest) -> dict:
     try:
         question = request.question
         conversation = request.conversation
+        selected_files = request.files or []
+        
         logger.info(f"Received question: {question}")
         logger.info(f"Received conversation: {conversation}")
-        result = await run_agent(question, conversation.conversation)
+        logger.info(f"Received selected files: {selected_files}")
+        
+        result = await run_agent(question, conversation.conversation, selected_files)
         answer = result.get("response")
         return {"answer": answer, "status": "success"}
     except Exception as e:

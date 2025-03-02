@@ -6,7 +6,7 @@ import { FileItem, FileProcessingStatus } from '../types'
 import { Checkbox } from './checkbox'
 import { ScrollArea } from './scroll-area'
 import { Button } from './button'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RefreshCw, FileQuestion } from 'lucide-react'
 
 interface FileSidebarProps {
   onFileSelectionChange?: (selectedFiles: string[]) => void
@@ -145,6 +145,14 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
           >
             Select All ({indexedFiles.length})
           </label>
+        </div>
+      </div>
+      
+      {/* Help text */}
+      <div className="p-2 bg-blue-50 text-blue-700 text-xs border-b">
+        <div className="flex items-start gap-2">
+          <FileQuestion className="h-4 w-4 flex-shrink-0 mt-0.5" />
+          <p>Select one or more files to provide context for the chatbot. At least one file must be selected to enable chat.</p>
         </div>
       </div>
       

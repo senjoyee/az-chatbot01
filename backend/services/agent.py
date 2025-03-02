@@ -168,24 +168,30 @@ def check_customer_specification(state: AgentState) -> AgentState:
 def retrieve_documents(state: AgentState) -> AgentState:
     logger.info(f"Retrieving documents for question: {state.question}")
     try:
+        # Build filters based on available criteria
+        filters = {}
+        
+        # Add customer filter if customers are detected
+        if state.customers:
+            filters["customer"] = state.customers
+            logger.info(f"Adding customer filter: {state.customers}")
+            
+        # Add file filter if files are selected
+        if state.selected_files:
+            filters["source"] = state.selected_files
+            logger.info(f"Adding file filter: {state.selected_files}")
+            
+        # If no filters, pass None to get all documents
+        filters = filters if filters else None
+        
         state.documents = retriever_tool.run({
             "query": state.question,
             "k": 25,
-            "filters": None
+            "filters": filters
         })
-        logger.info(f"Initially retrieved {len(state.documents)} documents")
-
-        if state.customers:
-            filtered_docs = []
-            for doc in state.documents:
-                doc_customer = doc.metadata.get('customer', '').lower()
-                if any(customer.lower() in doc_customer for customer in state.customers):
-                    filtered_docs.append(doc)
-            state.documents = filtered_docs
-            logger.info(f"After customer filtering: {len(state.documents)} documents remain")
-        else:
-            logger.info("No customer filtering applied.")
-
+        
+        logger.info(f"Retrieved {len(state.documents)} documents with filters: {filters}")
+        
         if not state.documents:
             state.response = "I could not find any relevant documents in the database."
             state.should_stop = True
@@ -341,7 +347,7 @@ builder.add_conditional_edges(
 builder.set_entry_point("detect_casual")
 agent = builder.compile()
 
-async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any]:
+async def run_agent(question: str, chat_history: List[Message], selected_files: List[str] = None) -> Dict[str, Any]:
     # Note: We no longer rely solely on the in-memory flag since it is reset each turn.
     inputs = {
         "question": question,
@@ -352,6 +358,7 @@ async def run_agent(question: str, chat_history: List[Message]) -> Dict[str, Any
         "should_stop": False,
         "answer_generated_from_document_store": None,
         "customer_reminder_sent": False,
+        "selected_files": selected_files or []
     }
     try:
         result = await agent.ainvoke(inputs)

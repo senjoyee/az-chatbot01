@@ -42,6 +42,7 @@ class AgentState(BaseModel):
     documents: Optional[List[Any]] = None
     response: Optional[str] = None
     customers: Optional[List[str]] = None
+    selected_files: Optional[List[str]] = None
     conversation_turns: int = 0
     should_stop: bool = False
     can_generate_answer: bool = True
