@@ -7,7 +7,8 @@ import { StatusIndicator } from './status-indicator'
 import { Checkbox } from './checkbox'
 import { ScrollArea } from './scroll-area'
 import { Button } from './button'
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react'
+import { RefreshCw } from 'lucide-react'
+import { ResizableSidebar } from './resizable-sidebar'
 
 interface FileSidebarProps {
   onFileSelectionChange?: (selectedFiles: string[]) => void
@@ -18,7 +19,6 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
   
   // Only show completed files
   const indexedFiles = files.filter(file => file.status === FileProcessingStatus.COMPLETED)
@@ -92,26 +92,11 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
     }
   }
 
-  if (collapsed) {
-    return (
-      <div className="h-full flex flex-col border-r bg-gray-50">
-        <Button 
-          variant="ghost" 
-          size="icon" 
-          onClick={() => setCollapsed(false)}
-          className="m-2"
-        >
-          <ChevronRight className="h-4 w-4" />
-        </Button>
-      </div>
-    )
-  }
-
   return (
-    <div className="h-full flex flex-col border-r bg-gray-50 w-64 font-mono">
-      <div className="p-4 border-b flex justify-between items-center">
-        <h3 className="font-medium text-sm">Indexed Files</h3>
-        <div className="flex gap-1">
+    <ResizableSidebar defaultWidth={320} minWidth={240} maxWidthPercent={33}>
+      <div className="font-mono h-full flex flex-col">
+        <div className="p-4 border-b flex justify-between items-center">
+          <h3 className="font-medium text-sm">Indexed Files</h3>
           <Button 
             variant="ghost" 
             size="icon" 
@@ -121,64 +106,55 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setCollapsed(true)}
-            className="h-8 w-8"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
         </div>
-      </div>
-      
-      <div className="p-2 border-b">
-        <div className="flex items-center space-x-2">
-          <Checkbox 
-            id="select-all" 
-            checked={selectedFiles.length === indexedFiles.length && indexedFiles.length > 0}
-            onCheckedChange={handleSelectAll}
-          />
-          <label 
-            htmlFor="select-all" 
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Select All ({indexedFiles.length})
-          </label>
+        
+        <div className="p-2 border-b">
+          <div className="flex items-center space-x-2">
+            <Checkbox 
+              id="select-all" 
+              checked={selectedFiles.length === indexedFiles.length && indexedFiles.length > 0}
+              onCheckedChange={handleSelectAll}
+            />
+            <label 
+              htmlFor="select-all" 
+              className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Select All ({indexedFiles.length})
+            </label>
+          </div>
         </div>
+        
+        <ScrollArea className="flex-1">
+          {loading ? (
+            <div className="flex justify-center items-center p-4">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+            </div>
+          ) : error ? (
+            <div className="p-4 text-sm text-red-500">{error}</div>
+          ) : indexedFiles.length === 0 ? (
+            <div className="p-4 text-sm text-gray-500">No indexed files found</div>
+          ) : (
+            <div className="p-2 space-y-1">
+              {indexedFiles.map((file) => (
+                <div key={file.id} className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded">
+                  <Checkbox 
+                    id={`file-${file.id}`}
+                    checked={selectedFiles.includes(file.id)}
+                    onCheckedChange={() => handleFileSelection(file.id)}
+                  />
+                  <label 
+                    htmlFor={`file-${file.id}`}
+                    className="text-sm leading-none truncate flex-1 cursor-pointer"
+                    title={file.name}
+                  >
+                    {file.name}
+                  </label>
+                </div>
+              ))}
+            </div>
+          )}
+        </ScrollArea>
       </div>
-      
-      <ScrollArea className="flex-1">
-        {loading ? (
-          <div className="flex justify-center items-center p-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
-          </div>
-        ) : error ? (
-          <div className="p-4 text-sm text-red-500">{error}</div>
-        ) : indexedFiles.length === 0 ? (
-          <div className="p-4 text-sm text-gray-500">No indexed files found</div>
-        ) : (
-          <div className="p-2 space-y-1">
-            {indexedFiles.map((file) => (
-              <div key={file.id} className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded">
-                <Checkbox 
-                  id={`file-${file.id}`}
-                  checked={selectedFiles.includes(file.id)}
-                  onCheckedChange={() => handleFileSelection(file.id)}
-                />
-                <label 
-                  htmlFor={`file-${file.id}`}
-                  className="text-sm leading-none truncate flex-1 cursor-pointer"
-                  title={file.name}
-                >
-                  {file.name}
-                </label>
-              </div>
-            ))}
-          </div>
-        )}
-      </ScrollArea>
-    </div>
+    </ResizableSidebar>
   )
 }
