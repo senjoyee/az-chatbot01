@@ -12,7 +12,7 @@ class RetrieverInput(BaseModel):
     """Input for the retriever tool."""
     query: str = Field(..., description="The query to search for")
     k: int = Field(default=10, description="Number of documents to retrieve")
-    filter: Optional[str] = Field(default=None, description="Optional filter expression to apply")
+    filters: Optional[str] = Field(default=None, description="Optional filter expression to apply")
 
 class RetrieverTool(BaseTool):
     """Tool for retrieving documents using hybrid search."""
@@ -35,7 +35,7 @@ class RetrieverTool(BaseTool):
             documents = vector_store.hybrid_search(
                 query,
                 k=k,
-                filters=filters  # Use filter parameter instead of filters
+                filters=filters
             )
             
             # Log the results
