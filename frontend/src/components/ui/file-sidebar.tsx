@@ -108,7 +108,7 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   }
 
   return (
-    <div className="h-full flex flex-col border-r bg-gray-50 w-64">
+    <div className="h-full flex flex-col border-r bg-gray-50 w-64 font-mono">
       <div className="p-4 border-b flex justify-between items-center">
         <h3 className="font-medium text-sm">Indexed Files</h3>
         <div className="flex gap-1">
