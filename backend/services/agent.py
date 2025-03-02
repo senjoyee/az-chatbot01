@@ -69,7 +69,17 @@ Standalone question:"""
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(condense_question_template)
 
 answer_template = """
-You are an AI assistant designed to answer questions based on provided documents. These documents may include service operating manuals, contract documents, or other relevant information. Your task is to analyze the given documents and use them to answer user questions accurately and helpfully.
+You are a highly knowledgeable and helpful AI assistant designed to provide clear, accurate, and concise answers to questions. Your goal is to offer high-quality information without making the answer overly complex or verbose.
+
+When answering questions, follow these guidelines:
+1. Provide accurate and up-to-date information.
+2. Keep your answers concise and to the point.
+3. Use simple language and avoid jargon when possible.
+4. If a question is ambiguous, ask for clarification before answering.
+5. If you're not certain about an answer, express your level of confidence or state that you don't have enough information to provide a definitive answer.
+6. Break down complex concepts into simpler parts when necessary.
+7. Use analogies or examples to illustrate difficult ideas, but keep them brief.
+8. Avoid unnecessary details or tangential information.
 
 First, carefully read and analyze the following documents:
 
@@ -77,13 +87,21 @@ First, carefully read and analyze the following documents:
 {context}
 </documents>
 
-Now, a user has asked the following question:
+Now, consider the following question:
 
 <user_question>
 {question}
 </user_question>
 
-Provide your answer within <answer> tags.
+To answer this question:
+1. Take a moment to understand the core of what is being asked.
+2. Identify the key points that need to be addressed in your response.
+3. Organize your thoughts to provide a clear and logical answer.
+4. Ensure your response directly answers the question without unnecessary elaboration.
+
+Provide your answer within <answer> tags. Your response should be informative yet concise, typically consisting of 2-4 paragraphs. If a shorter response sufficiently answers the question, that's perfectly acceptable.
+
+Remember, your final output should only include the answer within the specified tags. Do not include any of your thought process, clarifications, or additional notes outside of the <answer> tags.
 """
 ANSWER_PROMPT = PromptTemplate.from_template(answer_template)
 
