@@ -148,3 +148,35 @@ def is_casual_conversation(message: str, llm=None) -> bool:
     response = llm.invoke(classification_prompt.format(message=message))
     match = re.search(r"<answer>\s*(yes)\s*</answer>", response.content, flags=re.IGNORECASE)
     return match is not None
+
+def process_excel_elements(elements):
+    """
+    Process Excel table elements to ensure they're properly formatted for chunking.
+    Each sheet in the Excel file is stored as a Table object.
+    
+    Args:
+        elements: List of elements returned by partition_xlsx
+        
+    Returns:
+        List of processed elements with enhanced text and metadata
+    """
+    processed_elements = []
+    
+    for i, element in enumerate(elements):
+        # For Excel tables, we want to include both text and HTML representation
+        if hasattr(element, 'metadata') and hasattr(element.metadata, 'text_as_html'):
+            # Add sheet name or index to the element if available
+            sheet_name = f"Sheet {i+1}"
+            if hasattr(element.metadata, 'sheet_name') and element.metadata.sheet_name:
+                sheet_name = element.metadata.sheet_name
+                
+            # Create a more descriptive text representation
+            element.text = f"[{sheet_name}]\n{element.text}"
+            
+            # Store the HTML representation for potential future use
+            if not hasattr(element, 'excel_html'):
+                element.excel_html = element.metadata.text_as_html
+                
+        processed_elements.append(element)
+        
+    return processed_elements

@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from azure.storage.blob import BlobServiceClient
 from unstructured.partition.docx import partition_docx
 from unstructured.partition.pdf import partition_pdf
+from unstructured.partition.xlsx import partition_xlsx
 from unstructured.chunking.title import chunk_by_title
 import json
 import asyncio
@@ -12,7 +13,7 @@ from datetime import datetime
 import os
 
 # Import utility functions and configuration
-from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata, extract_source
+from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata, extract_source, process_excel_elements
 from config.logging_config import setup_logging
 from config.settings import BLOB_CONN_STRING, BLOB_CONTAINER
 from config.azure_search import search_client, embeddings
@@ -297,8 +298,13 @@ async def process_file_async(event: BlobEvent):
                     elif file_extension in ['.doc', '.docx']:
                         elements = partition_docx(filename=temp_file_path)
                         logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
+                    elif file_extension in ['.xlsx', '.xls']:
+                        elements = partition_xlsx(filename=temp_file_path)
+                        elements = process_excel_elements(elements)  # Process Excel elements
+                        logger.info(f"XLSX Partitioning - Number of elements: {len(elements)}")
                     else:
-                        raise ValueError(f"Unsupported file type: {file_extension}")
+                        supported_formats = ['.pdf', '.doc', '.docx', '.xlsx', '.xls']
+                        raise ValueError(f"Unsupported file type: {file_extension}. Supported formats are: {', '.join(supported_formats)}")
                     chunks = chunk_by_title(elements, max_characters=5000, new_after_n_chars=6000)
                     logger.info(f"Created {len(chunks)} chunks from {file_name}")
                     full_document = " ".join([chunk.text for chunk in chunks if hasattr(chunk, 'text') and chunk.text.strip()])
@@ -315,6 +321,21 @@ async def process_file_async(event: BlobEvent):
                                 "chunk_number": i + 1,
                                 "customer": customer_name
                             }
+                            
+                            # Add file type to metadata
+                            file_extension = os.path.splitext(file_name)[1].lower()
+                            metadata["file_type"] = file_extension.lstrip('.')
+                            
+                            # For Excel files, try to extract and include sheet information
+                            if file_extension in ['.xlsx', '.xls'] and i < len(chunks) and hasattr(chunks[i], 'excel_html'):
+                                metadata["content_type"] = "table"
+                                # Store a reference to the HTML representation
+                                metadata["has_table_html"] = True
+                                
+                                # If the original chunk has sheet name information, include it
+                                if hasattr(chunks[i], 'metadata') and hasattr(chunks[i].metadata, 'sheet_name'):
+                                    metadata["sheet_name"] = chunks[i].metadata.sheet_name
+                            
                             logger.info(f"Creating document for chunk {i+1} with metadata: {metadata}")
                             doc = DocumentIn(
                                 page_content=chunk,
