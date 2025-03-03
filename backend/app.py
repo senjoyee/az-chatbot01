@@ -22,6 +22,7 @@ from models.enums import ProcessingStatus
 from services.agent import run_agent
 from services.contextualizer import Contextualizer
 from azure_storage import AzureStorageManager
+from routes import file_status
 
 logger = setup_logging()
 
@@ -44,40 +45,11 @@ app.add_middleware(
     expose_headers=["*"],
 )
 
+# Include routers
+app.include_router(file_status.router)
+
 # Global lock to enforce sequential file processing
 processing_lock = asyncio.Lock()
-
-@app.get("/file_status/{file_name}")
-async def get_file_status(file_name: str) -> FileProcessingStatus:
-    status, error_message = await storage_manager.get_status(file_name)
-    return FileProcessingStatus(
-        status=status,
-        file_name=file_name,
-        error_message=error_message
-    )
-
-@app.get("/file_statuses")
-async def get_file_statuses(
-    page: int = Query(1, ge=1),
-    page_size: int = Query(10, ge=1, le=100),
-    status_filter: Optional[ProcessingStatus] = None
-):
-    try:
-        all_statuses = await storage_manager.get_all_statuses(status_filter)
-        all_statuses.sort(key=lambda x: x["last_updated"], reverse=True)
-        start_idx = (page - 1) * page_size
-        end_idx = start_idx + page_size
-        paginated_statuses = all_statuses[start_idx:end_idx]
-        return {
-            "total": len(all_statuses),
-            "page": page,
-            "page_size": page_size,
-            "total_pages": (len(all_statuses) + page_size - 1) // page_size,
-            "statuses": paginated_statuses
-        }
-    except Exception as e:
-        logger.error(f"Error getting file statuses: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/conversation")
 async def ask_question(request: ConversationRequest) -> dict:
@@ -431,11 +403,3 @@ async def index_documents(documents_in: List[DocumentIn]):
         raise
     logger.info(f"Completed indexing process. Successfully indexed {len(documents_in)} documents")
     return {"message": f"Successfully indexed {len(documents_in)} documents"}
-
-@app.post("/reset_file_status/{filename}")
-async def reset_file_status(filename: str):
-    try:
-        await storage_manager.reset_status(filename)
-        return {"message": f"Successfully reset status for {filename}"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
