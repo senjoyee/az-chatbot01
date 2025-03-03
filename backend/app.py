@@ -1,4 +1,5 @@
 import os
+from typing import List
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from azure.storage.blob import BlobServiceClient
