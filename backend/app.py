@@ -220,4 +220,6 @@ async def process_uploaded_files(event: BlobEvent):
 
 @app.post("/index_documents/")
 async def index_documents_endpoint(documents_in: List[DocumentIn]):
-    return await file_processor.index_documents(documents_in)
+    from services.document_service import DocumentService
+    document_service = DocumentService()
+    return await document_service.index_documents(documents_in)
