@@ -114,7 +114,9 @@ async def delete_file(filename: str):
             logger.error(f"File {filename} not found")
             raise HTTPException(status_code=404, detail=f"File {filename} not found")
         logger.info(f"Deleting chunks from vector store for file: {filename}")
-        deletion_result = await file_processor.delete_from_vector_store(filename)
+        from services.document_service import DocumentService
+        document_service = DocumentService()
+        deletion_result = await document_service.delete_from_vector_store(filename)
         logger.info(f"Vector store deletion result: {deletion_result}")
         blob_client.delete_blob()
         logger.info(f"Successfully deleted file: {filename}")
