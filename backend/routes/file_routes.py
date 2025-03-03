@@ -34,17 +34,3 @@ async def upload_files(
     Upload multiple files with optional customer mapping.
     """
     return await controller.upload_files(files, customer_map)
-
-@router.post("/process_uploaded_files")
-async def process_uploaded_files(event: BlobEvent, controller: FileController = Depends()):
-    """
-    Process a file that was previously uploaded.
-    """
-    return await controller.process_uploaded_files(event)
-
-@router.post("/index_documents/")
-async def index_documents(documents_in: List[DocumentIn], controller: FileController = Depends()):
-    """
-    Index documents in the vector store.
-    """
-    return await controller.index_documents(documents_in)
