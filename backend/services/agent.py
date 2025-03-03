@@ -25,8 +25,7 @@ from config.prompts import (
     CONDENSE_QUESTION_PROMPT,
     ANSWER_PROMPT,
     CONVERSATION_PROMPT,
-    DECISION_PROMPT,
-    CUSTOMER_NAMES
+    DECISION_PROMPT
 )
 
 from config.azure_search import vector_store
@@ -94,6 +93,14 @@ def condense_question(state: AgentState) -> AgentState:
     result = _input.invoke(state)
     state.question = result
     return state
+
+CUSTOMER_NAMES = [
+    "bsw",
+    "tbs",
+    "npac",
+    "asahi"
+    # Add more customer names here
+]
 
 def check_customer_specification(state: AgentState) -> AgentState:
     """

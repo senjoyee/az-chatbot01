@@ -78,10 +78,3 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(CONDENSE_QUESTION_TEMPLA
 ANSWER_PROMPT = PromptTemplate.from_template(ANSWER_TEMPLATE)
 CONVERSATION_PROMPT = PromptTemplate.from_template(CONVERSATION_TEMPLATE)
 DECISION_PROMPT = PromptTemplate.from_template(DECISION_TEMPLATE)
-CUSTOMER_NAMES = [
-    "bsw",
-    "tbs",
-    "npac",
-    "asahi",
-    # Add more customer names here
-]
