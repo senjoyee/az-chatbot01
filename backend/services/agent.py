@@ -26,6 +26,7 @@ from config.prompts import (
     ANSWER_PROMPT,
     CONVERSATION_PROMPT,
     DECISION_PROMPT,
+    CUSTOMER_NAMES
 )
 
 from config.azure_search import vector_store
