@@ -41,6 +41,7 @@ To answer this question:
 2. Identify the key points that need to be addressed in your response.
 3. Organize your thoughts to provide a clear and logical answer.
 4. Ensure your response directly answers the question without unnecessary elaboration.
+5. Where possible, please provide your answer in bullet points.
 
 Provide your answer within <answer> tags. Your response should be informative yet concise, typically consisting of 2-4 paragraphs. If a shorter response sufficiently answers the question, that's perfectly acceptable.
 
