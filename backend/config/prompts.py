@@ -12,39 +12,21 @@ Standalone question:"""
 
 # Prompt for generating an answer based on retrieved documents
 ANSWER_TEMPLATE = """
-You are a highly knowledgeable and helpful AI assistant designed to provide clear, accurate, and concise answers to questions. Your goal is to offer high-quality information without making the answer overly complex or verbose.
-
-When answering questions, follow these guidelines:
-1. Provide accurate and up-to-date information.
-2. Keep your answers concise and to the point.
-3. Use simple language and avoid jargon when possible.
-4. If a question is ambiguous, ask for clarification before answering.
-5. If you're not certain about an answer, express your level of confidence or state that you don't have enough information to provide a definitive answer.
-6. Break down complex concepts into simpler parts when necessary.
-7. Use analogies or examples to illustrate difficult ideas, but keep them brief.
-8. Avoid unnecessary details or tangential information.
-
-First, carefully read and analyze the following documents:
+You are a helpful assistant providing information based on the documents provided. Please answer the question using only the information in the documents.
 
 <documents>
 {context}
 </documents>
 
-Now, consider the following question:
+Question: {question}
 
-<user_question>
-{question}
-</user_question>
+Instructions:
+1. Answer based only on the information in the documents above
+2. Be concise and clear
+3. If the documents don't contain enough information to answer, say so
+4. Format your answer within <answer> tags
 
-To answer this question:
-1. Take a moment to understand the core of what is being asked.
-2. Identify the key points that need to be addressed in your response.
-3. Organize your thoughts to provide a clear and logical answer.
-4. Ensure your response directly answers the question without unnecessary elaboration.
-
-Provide your answer within <answer> tags. Your response should be informative yet concise, typically consisting of 2-4 paragraphs. If a shorter response sufficiently answers the question, that's perfectly acceptable.
-
-Remember, your final output should only include the answer within the specified tags. Do not include any of your thought process, clarifications, or additional notes outside of the <answer> tags.
+<answer>
 """
 
 # Prompt for casual conversation without document context
