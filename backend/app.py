@@ -23,6 +23,7 @@ from services.agent import run_agent
 from services.contextualizer import Contextualizer
 from azure_storage import AzureStorageManager
 from routes import file_status
+from services.file_processor import FileProcessor
 
 logger = setup_logging()
 
@@ -30,6 +31,7 @@ logger = setup_logging()
 storage_manager = AzureStorageManager()
 blob_service_client = BlobServiceClient.from_connection_string(BLOB_CONN_STRING)
 contextualizer = Contextualizer()
+file_processor = FileProcessor()
 
 app = FastAPI()
 
@@ -118,7 +120,7 @@ async def delete_file(filename: str):
             logger.error(f"File {filename} not found")
             raise HTTPException(status_code=404, detail=f"File {filename} not found")
         logger.info(f"Deleting chunks from vector store for file: {filename}")
-        deletion_result = await delete_from_vector_store(filename)
+        deletion_result = await file_processor.delete_from_vector_store(filename)
         logger.info(f"Vector store deletion result: {deletion_result}")
         blob_client.delete_blob()
         logger.info(f"Successfully deleted file: {filename}")
@@ -213,7 +215,7 @@ async def process_uploaded_files(event: BlobEvent):
             error_message=error_message
         )
     try:
-        asyncio.create_task(process_file_async(event))
+        asyncio.create_task(file_processor.process_file_async(event))
         return FileProcessingStatus(
             status=ProcessingStatus.IN_PROGRESS,
             file_name=file_name,
@@ -223,183 +225,6 @@ async def process_uploaded_files(event: BlobEvent):
         await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
-async def process_file_async(event: BlobEvent):
-    async with processing_lock:
-        file_name = event.file_name
-        logger.info(f"Starting to process file: {file_name}")
-        try:
-            if event.event_type == "Microsoft.Storage.BlobDeleted":
-                logger.info(f"Processing delete event for file: {file_name}")
-                await delete_from_vector_store(file_name)
-                await storage_manager.delete_status(file_name)
-                logger.info(f"Successfully processed delete event for file: {file_name}")
-            elif event.event_type == "Microsoft.Storage.BlobCreated":
-                # Set status to IN_PROGRESS at the beginning of processing
-                await storage_manager.update_status(file_name, ProcessingStatus.IN_PROGRESS)
-                logger.info(f"Updated status for {file_name} to IN_PROGRESS")
-                
-                try:
-                    await delete_from_vector_store(file_name)
-                    logger.info(f"Cleaned up existing chunks for {file_name}")
-                except Exception as e:
-                    logger.warning(f"Error cleaning up existing chunks: {str(e)}")
-                try:
-                    logger.info(f"Downloading file: {file_name}")
-                    temp_file_path = await storage_manager.download_file(file_name)
-                    logger.info(f"Successfully downloaded file: {file_name}")
-                    container_client = storage_manager.blob_service_client.get_container_client(BLOB_CONTAINER)
-                    blob_client = container_client.get_blob_client(blob=file_name)
-                    blob_properties = blob_client.get_blob_properties()
-                    
-                    # Log all metadata for debugging
-                    logger.info(f"All metadata for {file_name}: {blob_properties.metadata}")
-                    
-                    customer_name = blob_properties.metadata.get("customer", "unknown")
-                    logger.info(f"Retrieved customer name from metadata: {customer_name}")
-                    file_extension = os.path.splitext(file_name)[1].lower()
-                    logger.info(f"Processing {file_extension} file: {file_name}")
-                    if file_extension == '.pdf':
-                        elements = partition_pdf(
-                            filename=temp_file_path,
-                            #strategy="hi_res",
-                            #infer_table_structure=True,
-                            strategy="fast",
-                            include_metadata=True
-                        )
-                        logger.info(f"PDF Partitioning - Number of elements: {len(elements)}")
-                    elif file_extension in ['.doc', '.docx']:
-                        elements = partition_docx(filename=temp_file_path)
-                        logger.info(f"DOCX Partitioning - Number of elements: {len(elements)}")
-                    elif file_extension in ['.xlsx', '.xls']:
-                        elements = partition_xlsx(filename=temp_file_path)
-                        elements = process_excel_elements(elements)  # Process Excel elements
-                        logger.info(f"XLSX Partitioning - Number of elements: {len(elements)}")
-                    else:
-                        supported_formats = ['.pdf', '.doc', '.docx', '.xlsx', '.xls']
-                        raise ValueError(f"Unsupported file type: {file_extension}. Supported formats are: {', '.join(supported_formats)}")
-                    chunks = chunk_by_title(elements, max_characters=5000, new_after_n_chars=6000)
-                    logger.info(f"Created {len(chunks)} chunks from {file_name}")
-                    full_document = " ".join([chunk.text for chunk in chunks if hasattr(chunk, 'text') and chunk.text.strip()])
-                    logger.info(f"Generating contextualized chunks for {file_name}")
-                    contextualized_chunks = await contextualizer.contextualize_chunks(full_document, [chunk.text for chunk in chunks])
-                    logger.info(f"Created {len(contextualized_chunks)} contextualized chunks for {file_name}")
-                    documents = []
-                    base_id = sanitize_id(file_name)
-                    logger.info(f"Converting contextualized chunks to documents for {file_name}")
-                    for i, chunk in enumerate(contextualized_chunks):
-                        if chunk.strip():
-                            metadata = {
-                                "source": file_name,
-                                "chunk_number": i + 1,
-                                "customer": customer_name
-                            }
-                            
-                            # Add file type to metadata
-                            file_extension = os.path.splitext(file_name)[1].lower()
-                            metadata["file_type"] = file_extension.lstrip('.')
-                            
-                            # For Excel files, try to extract and include sheet information
-                            if file_extension in ['.xlsx', '.xls'] and i < len(chunks) and hasattr(chunks[i], 'excel_html'):
-                                metadata["content_type"] = "table"
-                                # Store a reference to the HTML representation
-                                metadata["has_table_html"] = True
-                                
-                                # If the original chunk has sheet name information, include it
-                                if hasattr(chunks[i], 'metadata') and hasattr(chunks[i].metadata, 'sheet_name'):
-                                    metadata["sheet_name"] = chunks[i].metadata.sheet_name
-                            
-                            logger.info(f"Creating document for chunk {i+1} with metadata: {metadata}")
-                            doc = DocumentIn(
-                                page_content=chunk,
-                                metadata={**serialize_metadata(metadata),
-                                          "last_update": datetime.utcnow().isoformat() + "Z",
-                                          "id": f"{base_id}_{i:04d}"}
-                            )
-                            documents.append(doc)
-                    logger.info(f"Created {len(documents)} documents from contextualized chunks for {file_name}")
-                    logger.info(f"Starting indexing for {len(documents)} contextualized documents from {file_name}")
-                    await index_documents(documents)
-                    logger.info(f"Successfully indexed {len(documents)} contextualized documents from {file_name}")
-                    await storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
-                    logger.info(f"Completed processing file: {file_name}")
-                except Exception as e:
-                    logger.error(f"Error processing file {file_name}: {str(e)}")
-                    await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
-                    raise
-        except Exception as e:
-            logger.error(f"Error processing file {file_name}: {str(e)}")
-            await storage_manager.update_status(file_name, ProcessingStatus.FAILED, str(e))
-            raise
-        finally:
-            try:
-                if 'temp_file_path' in locals() and temp_file_path:
-                    os.unlink(temp_file_path)
-            except Exception as e:
-                logger.warning(f"Error cleaning up temp file: {str(e)}")
-
-async def delete_from_vector_store(filename: str) -> dict:
-    try:
-        logger.info(f"Starting deletion process for file: {filename}")
-        source = filename
-        escaped_source = escape_odata_filter_value(source)
-        logger.info(f"Searching for documents with source: {source}")
-        documents_to_delete = search_client.search(
-            search_text="*",
-            filter=f"source eq '{escaped_source}'"
-        )
-        deleted_count = 0
-        for doc in documents_to_delete:
-            logger.info(f"Deleting chunk {deleted_count + 1} with ID: {doc['id']}")
-            search_client.delete_documents(documents=[{"id": doc["id"]}])
-            deleted_count += 1
-        logger.info(f"Deletion complete. Removed {deleted_count} chunks for file: {filename}")
-        return {
-            "message": f"Deleted {deleted_count} chunks for file {filename}",
-            "deleted_count": deleted_count
-        }
-    except Exception as e:
-        logger.error(f"Error deleting chunks for file {filename}: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
-
 @app.post("/index_documents/")
-async def index_documents(documents_in: List[DocumentIn]):
-    logger.info(f"Starting indexing process for {len(documents_in)} documents")
-    try:
-        documents_to_index = []
-        for document in documents_in:
-            try:
-                # Log the document metadata for debugging
-                logger.info(f"Processing document for indexing: ID={document.metadata.get('id', 'unknown')}, "
-                           f"Source={document.metadata.get('source', 'unknown')}, "
-                           f"Customer={document.metadata.get('customer', 'unknown')}")
-                
-                embedding = embeddings.embed_query(document.page_content)
-            except Exception as e:
-                logger.error(f"Error generating embedding: {str(e)}")
-                continue
-            is_contextualized = "\n\n" in document.page_content
-            document_obj = {
-                "id": document.metadata["id"],
-                "content": document.page_content,
-                "content_vector": embedding,
-                "metadata": json.dumps(document.metadata),
-                "source": document.metadata.get("source", "unknown"),
-                "customer": document.metadata.get("customer", "unknown").lower(),
-                "last_update": document.metadata["last_update"],
-                "contextualized": is_contextualized
-            }
-            # Log the final document object for debugging
-            logger.info(f"Document ready for indexing: ID={document_obj['id']}, "
-                       f"Customer={document_obj['customer']}")
-            
-            documents_to_index.append(document_obj)
-        if documents_to_index:
-            result = search_client.upload_documents(documents=documents_to_index)
-            logger.info(f"Successfully indexed {len(documents_to_index)} documents")
-        else:
-            logger.warning("No documents to index.")
-    except Exception as e:
-        logger.error(f"Error during document indexing: {str(e)}")
-        raise
-    logger.info(f"Completed indexing process. Successfully indexed {len(documents_in)} documents")
-    return {"message": f"Successfully indexed {len(documents_in)} documents"}
+async def index_documents_endpoint(documents_in: List[DocumentIn]):
+    return await file_processor.index_documents(documents_in)
