@@ -5,7 +5,7 @@ from models.enums import ProcessingStatus
 from models.schemas import FileProcessingStatus
 from controllers.file_controller import FileController
 
-router = APIRouter(tags=["file_status"])
+router = APIRouter(tags=["File Status"])
 
 @router.get("/file_status/{file_name}")
 async def get_file_status(file_name: str, controller: FileController = Depends()) -> FileProcessingStatus:
