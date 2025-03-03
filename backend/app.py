@@ -1,27 +1,20 @@
 import os
-from typing import List, Optional, Dict, Union
 from fastapi import FastAPI, File, HTTPException, UploadFile, Query, Form, BackgroundTasks, Request, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from azure.storage.blob import BlobServiceClient
-from unstructured.partition.docx import partition_docx
-from unstructured.partition.pdf import partition_pdf
-from unstructured.partition.xlsx import partition_xlsx
-from unstructured.chunking.title import chunk_by_title
 import json
 import asyncio
 from datetime import datetime
 import os
 
 # Import utility functions and configuration
-from utils.helpers import escape_odata_filter_value, sanitize_id, serialize_metadata, extract_source, process_excel_elements
 from config.logging_config import setup_logging
 from config.settings import BLOB_CONN_STRING, BLOB_CONTAINER
-from config.azure_search import search_client, embeddings
 from models.schemas import ConversationRequest, DocumentIn, BlobEvent, FileProcessingStatus
 from models.enums import ProcessingStatus
 from services.agent import run_agent
 from services.contextualizer import Contextualizer
-from azure_storage import AzureStorageManager
+from services.azure_storage import AzureStorageManager
 from routes import file_status
 from services.file_processor import FileProcessor
 
