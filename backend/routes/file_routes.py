@@ -4,7 +4,7 @@ from typing import List
 from models.schemas import BlobEvent, DocumentIn
 from controllers.file_controller import FileController
 
-router = APIRouter(prefix="/file", tags=["file_operations"])
+router = APIRouter(tags=["File Operations"])
 
 @router.get("/listfiles")
 async def list_files(
