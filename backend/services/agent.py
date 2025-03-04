@@ -57,6 +57,7 @@ llm_o3_mini = AzureChatOpenAI(
     openai_api_version="2024-12-01-preview",
     azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
     api_key=AZURE_OPENAI_API_KEY_SC,
+    temperature=0.0,
 )
 
 def format_chat_history(chat_history: List[Message]) -> str:

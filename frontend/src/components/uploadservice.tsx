@@ -246,7 +246,7 @@ export default function DocumentUploadService() {
             <CardTitle className="text-2xl">Document Upload Service</CardTitle>
             <CardDescription>Upload, manage, and delete your documents securely in Azure Blob Storage</CardDescription>
           </div>
-          <Link href="/chatbot" className="inline-flex items-center px-3 py-2 bg-gray-800 text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-700">
+          <Link href="/" className="inline-flex items-center px-3 py-2 bg-gray-800 text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-700">
             <MessageSquare className="h-4 w-4 mr-2" />
             Go to Chatbot
           </Link>
