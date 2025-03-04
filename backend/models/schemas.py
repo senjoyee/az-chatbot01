@@ -46,7 +46,5 @@ class AgentState(BaseModel):
     selected_files: Optional[List[str]] = None
     conversation_turns: int = 0
     should_stop: bool = False
-    can_generate_answer: bool = True
-    answer_generated_from_document_store: Optional[str] = None
     needs_casual_response: bool = False
     customer_reminder_sent: bool = False

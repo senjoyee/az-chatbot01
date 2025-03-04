@@ -198,37 +198,8 @@ def rerank_documents(state: AgentState) -> AgentState:
     state.documents = [doc for doc, _ in scored_docs]
     return state
 
-def decide_to_generate(state: AgentState) -> AgentState:
-    logger.info("Deciding whether to generate a response")
-    TOP_K_DOCUMENTS = 10
-    top_documents = state.documents[:TOP_K_DOCUMENTS]
-    context = "\n\n".join(doc.page_content for doc in top_documents)
-
-    _input = (
-        RunnableLambda(lambda x: {
-            "context": context,
-            "question": x.question
-        })
-        | DECISION_PROMPT
-        | llm_o3_mini
-        | StrOutputParser()
-    )
-    response = _input.invoke(state).strip().lower()
-    state.can_generate_answer = "yes" in response
-
-    if state.can_generate_answer:
-        state.answer_generated_from_document_store = "pass"
-    else:
-        state.answer_generated_from_document_store = "fail"
-        state.response = "The answer to your query cannot be generated from the documents provided."
-        logger.info("Answer generation decision: cannot generate answer")
-    logger.info(f"Decision: {state.can_generate_answer}, Document Store Answer: {state.answer_generated_from_document_store}")
-    return state
-
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
-    if state.answer_generated_from_document_store != "pass":
-        return state
     TOP_K_DOCUMENTS = 10
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     context = "\n\n".join(doc.page_content for doc in top_documents)
@@ -244,7 +215,14 @@ def generate_response(state: AgentState) -> AgentState:
         | StrOutputParser()
     )
     response = _input.invoke(state)
-    state.response = response.replace("<answer>", "").replace("</answer>", "").strip()
+    cleaned_response = response.replace("<answer>", "").replace("</answer>", "").strip()
+    
+    # Check if the response indicates insufficient information
+    if "I don't have enough information" in cleaned_response:
+        state.response = "I couldn't find enough information in my knowledge base to answer your question properly. Could you please rephrase or ask something else?"
+    else:
+        state.response = cleaned_response
+    
     return state
 
 def update_history(state: AgentState) -> AgentState:
@@ -281,7 +259,6 @@ builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
-builder.add_node("decide_to_generate", decide_to_generate)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 
@@ -299,11 +276,7 @@ builder.add_conditional_edges(
     "retrieve",
     lambda s: "update_history" if s.should_stop else "rerank"
 )
-builder.add_edge("rerank", "decide_to_generate")
-builder.add_conditional_edges(
-    "decide_to_generate",
-    lambda s: "generate" if s.can_generate_answer else "update_history"
-)
+builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
 builder.add_conditional_edges(
     "update_history",
@@ -320,9 +293,7 @@ async def run_agent(question: str, chat_history: List[Message], selected_files: 
         "chat_history": chat_history,
         "documents": None,
         "response": None,
-        "can_generate_answer": True,
         "should_stop": False,
-        "answer_generated_from_document_store": None,
         "customer_reminder_sent": False,
         "selected_files": selected_files or []
     }

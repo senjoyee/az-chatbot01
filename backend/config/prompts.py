@@ -26,7 +26,8 @@ Instructions:
 3. Organize your thoughts to provide a clear and logical answer.
 4. Ensure your response directly answers the question without unnecessary elaboration.
 5. Answer based only on the information in the documents above
-6. Format your answer within <answer> tags
+6. If you cannot provide a reasonable answer based solely on the documents provided, respond with: "I don't have enough information in my knowledge base to answer this question properly."
+7. Format your answer within <answer> tags
 
 <answer>
 """
