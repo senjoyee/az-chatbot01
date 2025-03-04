@@ -5,6 +5,7 @@ on:
     branches:
       - main
       - selective-search
+      - code-module
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'
