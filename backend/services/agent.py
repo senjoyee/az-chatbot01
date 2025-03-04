@@ -131,18 +131,26 @@ def retrieve_documents(state: AgentState) -> AgentState:
             
         # Add file filter if files are selected
         if state.selected_files:
-            # If there are too many files, limit the number to prevent filter expression from getting too long
-            MAX_FILES_IN_FILTER = 15
-            selected_files = state.selected_files
+            # Check if this is effectively a "select all" scenario
+            # We'll use a threshold to determine if the user has selected a large number of files
+            # which would be equivalent to searching the entire database
+            SELECT_ALL_THRESHOLD = 100  # If more than this many files are selected, treat as "select all"
+            MAX_FILES_IN_FILTER = 50    # Allow up to 50 files in filter (up from 15)
             
-            if len(selected_files) > MAX_FILES_IN_FILTER:
-                logger.warning(f"Too many files selected ({len(selected_files)}). Limiting to {MAX_FILES_IN_FILTER} files.")
-                selected_files = selected_files[:MAX_FILES_IN_FILTER]
-            
-            # Escape single quotes by doubling them
-            file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in selected_files])
-            filter_parts.append(f"({file_filters})")
-            logger.info(f"Adding file filter for {len(selected_files)} files")
+            if len(state.selected_files) > SELECT_ALL_THRESHOLD:
+                logger.info(f"Large number of files selected ({len(state.selected_files)}). Treating as 'select all' - no filter will be applied.")
+                # Don't add any filter - search across all documents
+            else:
+                selected_files = state.selected_files
+                
+                if len(selected_files) > MAX_FILES_IN_FILTER:
+                    logger.warning(f"Too many files selected ({len(selected_files)}). Limiting to {MAX_FILES_IN_FILTER} files.")
+                    selected_files = selected_files[:MAX_FILES_IN_FILTER]
+                
+                # Escape single quotes by doubling them
+                file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in selected_files])
+                filter_parts.append(f"({file_filters})")
+                logger.info(f"Adding file filter for {len(selected_files)} files")
             
         # Combine filters if present
         if filter_parts:
@@ -179,7 +187,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
         except Exception as e:
             logger.error(f"Error calling retriever tool: {str(e)}")
             state.documents = []
-            state.response = "An error occurred while retrieving documents. Please try again with fewer files selected."
+            state.response = "An error occurred while retrieving documents. For best results, either select up to 50 specific files or use 'Select All' to search across the entire database."
             state.should_stop = True
             return state
     except Exception as e:

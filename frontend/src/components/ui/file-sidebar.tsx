@@ -152,7 +152,14 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
       <div className="p-2 bg-blue-50 text-blue-700 text-xs border-b">
         <div className="flex items-start gap-2">
           <FileQuestion className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <p>Select one or more files to provide context for the chatbot. At least one file must be selected to enable chat.</p>
+          <div>
+            <p>Select one or more files to provide context for the chatbot. At least one file must be selected to enable chat.</p>
+            <p className="mt-1">For best results:</p>
+            <ul className="list-disc ml-4 mt-0.5">
+              <li>Select up to 50 specific files for targeted searches</li>
+              <li>Use "Select All" to search across the entire database</li>
+            </ul>
+          </div>
         </div>
       </div>
       
