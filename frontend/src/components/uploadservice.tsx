@@ -239,21 +239,17 @@ export default function DocumentUploadService() {
   };
 
   return (
-    <div className="container mx-auto p-4 max-w-4xl">
-      <Card>
-        <CardHeader>
-          <div className="flex justify-between items-center">
-            <div>
-              <CardTitle className="text-2xl font-medium tracking-tight">Document Upload Service</CardTitle>
-              <CardDescription className="text-base text-muted-foreground">
-                Upload, manage, and delete your documents securely in Azure Blob Storage
-              </CardDescription>
-            </div>
-            <Link href="/chatbot" className="flex items-center px-3 py-1.5 bg-primary/90 hover:bg-primary text-white rounded-md text-sm font-medium transition-colors">
-              <MessageSquare className="h-4 w-4 mr-1.5" />
-              Go to Chatbot
-            </Link>
+    <div className="container mx-auto py-8 upload-service">
+      <Card className="shadow-lg">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div>
+            <CardTitle className="text-2xl">Document Upload Service</CardTitle>
+            <CardDescription>Upload, manage, and delete your documents securely in Azure Blob Storage</CardDescription>
           </div>
+          <Link href="/chatbot" className="inline-flex items-center px-3 py-2 bg-gray-800 text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-700">
+            <MessageSquare className="h-4 w-4 mr-2" />
+            Go to Chatbot
+          </Link>
         </CardHeader>
         <CardContent>
           {/* Dropzone */}

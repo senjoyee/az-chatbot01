@@ -1,10 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import './home-upload.css'
 
 export default function Home() {
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-100 to-white">
+    <main className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-blue-100 to-white home-page">
       <div className="text-center">
         <h1 className="text-4xl font-bold mb-8 text-blue-800">Document assistant service</h1>
         <div className="space-y-4">

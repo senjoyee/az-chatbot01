@@ -1,0 +1,23 @@
+/* CSS to override Work Sans font only for home and upload service pages */
+.home-page h1,
+.home-page a,
+.upload-service h1,
+.upload-service h2,
+.upload-service p,
+.upload-service button,
+.upload-service a,
+.upload-service th,
+.upload-service td,
+.upload-service div {
+  font-family: Arial, Helvetica, sans-serif !important;
+}
+
+/* Additional styling to ensure proper appearance */
+.home-page h1 {
+  font-weight: bold;
+}
+
+.upload-service .card-title {
+  font-family: Arial, Helvetica, sans-serif !important;
+  font-weight: bold;
+}
