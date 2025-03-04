@@ -124,11 +124,10 @@ def retrieve_documents(state: AgentState) -> AgentState:
         filter_expression = None
         filter_parts = []
         
-        # Add customer filter if customers are detected
+        # If customers are detected, log them but don't add explicit filter
+        # The hybrid search will naturally prioritize documents related to the customer
         if state.customers:
-            customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
-            filter_parts.append(f"({customer_filters})")
-            logger.info(f"Adding customer filter: {state.customers}")
+            logger.info(f"Detected customers: {state.customers} (will be handled by hybrid search)")
             
         # Add file filter if files are selected
         if state.selected_files:
@@ -145,7 +144,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
             filter_parts.append(f"({file_filters})")
             logger.info(f"Adding file filter for {len(selected_files)} files")
             
-        # Combine filters with AND if both are present
+        # Combine filters if present
         if filter_parts:
             filter_expression = " and ".join(filter_parts)
             logger.info(f"Combined filter expression: {filter_expression}")
@@ -156,17 +155,31 @@ def retrieve_documents(state: AgentState) -> AgentState:
             # If filter expression is very long, log a warning
             if len(filter_expression) > 10000:
                 logger.warning("Filter expression is very long, which might cause issues with Azure Search")
+        else:
+            logger.info("No filters applied - searching across all documents")
         
-        state.documents = retriever_tool.run({
-            "query": state.question,
-            "k": 25,
-            "filters": filter_expression
-        })
-        
-        logger.info(f"Retrieved {len(state.documents)} documents with filter: {filter_expression}")
-        
-        if not state.documents:
-            state.response = "I could not find any relevant documents in the database."
+        try:
+            state.documents = retriever_tool.run({
+                "query": state.question,
+                "k": 25,
+                "filters": filter_expression
+            })
+            
+            logger.info(f"Retrieved {len(state.documents)} documents")
+            
+            # Log the first few document sources for debugging
+            if state.documents:
+                sources = [doc.metadata.get('source', 'unknown') for doc in state.documents[:5]]
+                logger.info(f"First few document sources: {sources}")
+            
+            if not state.documents:
+                state.response = "I could not find any relevant documents in the database."
+                state.should_stop = True
+                return state
+        except Exception as e:
+            logger.error(f"Error calling retriever tool: {str(e)}")
+            state.documents = []
+            state.response = "An error occurred while retrieving documents. Please try again with fewer files selected."
             state.should_stop = True
             return state
     except Exception as e:
