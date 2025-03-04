@@ -79,7 +79,7 @@ export default function Component() {
   }
 
   return (  
-    <div className="flex h-screen bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden">  
+    <div className="flex h-screen bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden font-sans">  
       {/* File Sidebar */}
       <FileSidebar onFileSelectionChange={handleFileSelectionChange} />
       
@@ -89,18 +89,18 @@ export default function Component() {
           <div className="flex flex-col h-full relative z-10">  
             <div className="bg-primary text-primary-foreground p-6">  
               <div className="flex justify-between items-center">
-                <h2 className="text-2xl font-semibold font-mono">Document Assistant</h2>  
+                <h2 className="text-2xl font-semibold">Document Assistant</h2>  
                 <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-white/20 hover:bg-white/30 text-primary-foreground rounded-md text-sm font-medium transition-colors">
                   <Upload className="h-4 w-4 mr-1.5" />
                   Upload Documents
                 </Link>
               </div>
               {selectedFiles.length > 0 ? (
-                <p className="text-sm mt-1 text-primary-foreground/80 font-mono">
+                <p className="text-sm mt-1 text-primary-foreground/80">
                   {selectedFiles.length} file(s) selected for context
                 </p>
               ) : (
-                <p className="text-sm mt-1 text-primary-foreground/80 font-mono">
+                <p className="text-sm mt-1 text-primary-foreground/80">
                   No files selected. Please select at least one file to start chatting.
                 </p>
               )}
@@ -127,31 +127,31 @@ export default function Component() {
                   {messages.map((message) => (  
                     <div  
                       key={message.id}  
-                      className={`mb-2 flex ${  
+                      className={`mb-4 flex ${  
                         message.sender === 'user' ? 'justify-end' : 'justify-start'  
                       }`}  
                     >  
                       {message.sender === 'assistant' && (  
-                        <Avatar className="h-8 w-8 mr-2">  
+                        <Avatar className="h-8 w-8 mr-2 mt-1">  
                           <AvatarFallback>AI</AvatarFallback>  
                         </Avatar>  
                       )}  
                       <div  
-                        className={`inline-block p-3 rounded-lg max-w-[85%] ${  
+                        className={`inline-block p-4 rounded-lg max-w-[85%] ${  
                           message.sender === 'user'  
                             ? 'bg-primary/80 text-primary-foreground rounded-br-none'  
                             : 'bg-gray-100 text-gray-800 rounded-bl-none'  
                         }`}  
                       >  
                         <ReactMarkdown   
-                          className="font-mono text-sm whitespace-pre-wrap break-words [&>*]:leading-tight [&>p]:my-0.5 last:[&>p]:mb-0 first:[&>p]:mt-0"  
+                          className="text-sm whitespace-pre-wrap break-words [&>*]:leading-relaxed [&>p]:my-1 last:[&>p]:mb-0 first:[&>p]:mt-0"  
                           components={{  
                             code: ({node, inline, className, children, ...props}) => (  
                               <code  
                                 className={`${
                                   inline   
                                     ? 'bg-gray-200 px-1 rounded'   
-                                    : 'block bg-gray-800 text-white p-2 rounded my-1'  
+                                    : 'block bg-gray-800 text-white p-2 rounded my-2 font-mono'  
                                 } ${className}`}  
                                 {...props}  
                               >  
@@ -159,30 +159,39 @@ export default function Component() {
                               </code>  
                             ),  
                             p: ({children}) => (  
-                              <p className="whitespace-pre-wrap break-words leading-5">  
+                              <p className="whitespace-pre-wrap break-words leading-relaxed">  
                                 {children}  
                               </p>  
                             ),  
                             h1: ({children}) => (  
-                              <h1 className="text-base font-bold my-1">{children}</h1>  
+                              <h1 className="text-lg font-semibold my-2">{children}</h1>  
                             ),  
                             h2: ({children}) => (  
-                              <h2 className="text-base font-semibold my-1">{children}</h2>  
-                            )  
+                              <h2 className="text-base font-medium my-2">{children}</h2>  
+                            ),
+                            ul: ({children}) => (
+                              <ul className="list-disc pl-6 my-2">{children}</ul>
+                            ),
+                            ol: ({children}) => (
+                              <ol className="list-decimal pl-6 my-2">{children}</ol>
+                            ),
+                            li: ({children}) => (
+                              <li className="my-1">{children}</li>
+                            )
                           }}  
                         >  
                           {message.text}  
                         </ReactMarkdown>  
                       </div>  
                       {message.sender === 'user' && (  
-                        <Avatar className="h-8 w-8 ml-2">  
+                        <Avatar className="h-8 w-8 ml-2 mt-1">  
                           <AvatarFallback>U</AvatarFallback>  
                         </Avatar>  
                       )}  
                     </div>  
                   ))}  
                   {loading && (  
-                    <div className="flex items-center space-x-2 text-gray-500 font-mono">  
+                    <div className="flex items-center space-x-2 text-gray-500 mt-2">  
                       <div className="animate-pulse">Thinking...</div>  
                     </div>  
                   )}  
@@ -203,13 +212,14 @@ export default function Component() {
                       handleSend()  
                     }  
                   }}  
-                  className="flex-1 font-mono"  
+                  className="flex-1"  
                   disabled={loading || selectedFiles.length === 0}  
                 />  
                 <Button 
                   onClick={handleSend} 
                   disabled={loading || !input.trim() || selectedFiles.length === 0}
                   title={selectedFiles.length === 0 ? "Select at least one file to enable chat" : "Send message"}
+                  className="font-medium"
                 >  
                   <Send className="h-4 w-4 mr-2" />  
                   Send  
