@@ -30,6 +30,11 @@ class RetrieverTool(BaseTool):
             # Debug the filter format
             if filters:
                 logger.info(f"Filter type: {type(filters)}, value: {filters}")
+                
+                # Check if filter is too long and truncate if necessary
+                if len(filters) > 20000:
+                    logger.warning(f"Filter expression is too long ({len(filters)} chars). Azure Search may have issues with it.")
+                    logger.warning("Consider reducing the number of selected files.")
             
             # Execute the search with filters
             documents = vector_store.hybrid_search(

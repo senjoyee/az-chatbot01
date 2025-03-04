@@ -132,14 +132,30 @@ def retrieve_documents(state: AgentState) -> AgentState:
             
         # Add file filter if files are selected
         if state.selected_files:
-            file_filters = " or ".join([f"source eq '{file}'" for file in state.selected_files])
+            # If there are too many files, limit the number to prevent filter expression from getting too long
+            MAX_FILES_IN_FILTER = 15
+            selected_files = state.selected_files
+            
+            if len(selected_files) > MAX_FILES_IN_FILTER:
+                logger.warning(f"Too many files selected ({len(selected_files)}). Limiting to {MAX_FILES_IN_FILTER} files.")
+                selected_files = selected_files[:MAX_FILES_IN_FILTER]
+            
+            # Escape single quotes by doubling them
+            file_filters = " or ".join([f"source eq '{file.replace(\"'\", \"''\")}'" for file in selected_files])
             filter_parts.append(f"({file_filters})")
-            logger.info(f"Adding file filter: {state.selected_files}")
+            logger.info(f"Adding file filter for {len(selected_files)} files")
             
         # Combine filters with AND if both are present
         if filter_parts:
             filter_expression = " and ".join(filter_parts)
             logger.info(f"Combined filter expression: {filter_expression}")
+            
+            # Log the length of the filter expression to check if it's too long
+            logger.info(f"Filter expression length: {len(filter_expression)}")
+            
+            # If filter expression is very long, log a warning
+            if len(filter_expression) > 10000:
+                logger.warning("Filter expression is very long, which might cause issues with Azure Search")
         
         state.documents = retriever_tool.run({
             "query": state.question,
