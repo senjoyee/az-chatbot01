@@ -21,10 +21,12 @@ You are a helpful assistant providing information based on the documents provide
 Question: {question}
 
 Instructions:
-1. Answer based only on the information in the documents above
-2. Be concise and clear
-3. If the documents don't contain enough information to answer, say so
-4. Format your answer within <answer> tags
+1. Take a moment to understand the core of what is being asked.
+2. Identify the key points that need to be addressed in your response.
+3. Organize your thoughts to provide a clear and logical answer.
+4. Ensure your response directly answers the question without unnecessary elaboration.
+5. Answer based only on the information in the documents above
+6. Format your answer within <answer> tags
 
 <answer>
 """
