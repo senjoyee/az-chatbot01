@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Input } from "@/components/ui/input"
-import { Upload, Trash2, File, Info } from 'lucide-react'
+import { Upload, Trash2, File, Info, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
+import Link from 'next/link'
 import { uploadFiles, deleteFile, listFiles, getFileStatus, getFilesStatus } from './api'
 import { FileProcessingStatus, FileItem, FileWithCustomer } from './types'
 import { useFileStatusPolling } from './hooks/useFileStatusPolling'
@@ -241,10 +242,18 @@ export default function DocumentUploadService() {
     <div className="container mx-auto p-4 max-w-4xl">
       <Card>
         <CardHeader>
-          <CardTitle className="text-2xl font-medium tracking-tight">Document Upload Service</CardTitle>
-          <CardDescription className="text-base text-muted-foreground">
-            Upload, manage, and delete your documents securely in Azure Blob Storage
-          </CardDescription>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle className="text-2xl font-medium tracking-tight">Document Upload Service</CardTitle>
+              <CardDescription className="text-base text-muted-foreground">
+                Upload, manage, and delete your documents securely in Azure Blob Storage
+              </CardDescription>
+            </div>
+            <Link href="/chatbot" className="flex items-center px-3 py-1.5 bg-primary/90 hover:bg-primary text-white rounded-md text-sm font-medium transition-colors">
+              <MessageSquare className="h-4 w-4 mr-1.5" />
+              Go to Chatbot
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           {/* Dropzone */}

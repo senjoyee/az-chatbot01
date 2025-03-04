@@ -1,13 +1,14 @@
 'use client'  
 
 import { useState, useRef, useEffect } from 'react'  
-import { Send, FileQuestion } from 'lucide-react'  
+import { Send, FileQuestion, Upload } from 'lucide-react'  
 import { Button } from "@/components/ui/button"  
 import { Input } from "@/components/ui/input"  
 import { ScrollArea } from "@/components/ui/scroll-area"  
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"  
 import { Alert, AlertDescription } from "@/components/ui/alert"  
 import { FileSidebar } from "@/components/ui/file-sidebar"
+import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'  
 import { sendMessage } from "./api";  
 
@@ -87,7 +88,13 @@ export default function Component() {
         <div className="relative w-full h-full max-w-6xl rounded-lg bg-white shadow-2xl overflow-hidden">  
           <div className="flex flex-col h-full relative z-10">  
             <div className="bg-primary text-primary-foreground p-6">  
-              <h2 className="text-2xl font-semibold font-mono">Document Assistant</h2>  
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-semibold font-mono">Document Assistant</h2>  
+                <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-white/20 hover:bg-white/30 text-primary-foreground rounded-md text-sm font-medium transition-colors">
+                  <Upload className="h-4 w-4 mr-1.5" />
+                  Upload Documents
+                </Link>
+              </div>
               {selectedFiles.length > 0 ? (
                 <p className="text-sm mt-1 text-primary-foreground/80 font-mono">
                   {selectedFiles.length} file(s) selected for context
