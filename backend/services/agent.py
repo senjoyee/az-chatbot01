@@ -141,7 +141,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
                 selected_files = selected_files[:MAX_FILES_IN_FILTER]
             
             # Escape single quotes by doubling them
-            file_filters = " or ".join([f"source eq '{file.replace(\"'\", \"''\")}'" for file in selected_files])
+            file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in selected_files])
             filter_parts.append(f"({file_filters})")
             logger.info(f"Adding file filter for {len(selected_files)} files")
             
