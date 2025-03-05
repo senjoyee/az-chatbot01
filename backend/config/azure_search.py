@@ -17,9 +17,10 @@ from azure.search.documents.indexes.models import (
     SearchIndex,
     SemanticConfiguration,
     SemanticField,
-    SemanticSettings,
-    PrioritizedFields,
+    SemanticSearch,
+    SemanticPrioritizedFields,
 )
+
 from azure.core.credentials import AzureKeyCredential
 from langchain_community.vectorstores import AzureSearch
 from langchain_openai import AzureOpenAIEmbeddings
@@ -147,12 +148,12 @@ except Exception:
     # Define semantic configuration
     semantic_config = SemanticConfiguration(
         name="default-semantic-config",
-        prioritized_fields=PrioritizedFields(
+        prioritized_fields=SemanticPrioritizedFields(
             title_field=SemanticField(field_name="source"),
-            prioritized_content_fields=[
+            content_fields=[
                 SemanticField(field_name="content")
             ],
-            prioritized_keywords_fields=[
+            keywords_fields=[
                 SemanticField(field_name="metadata"),
                 SemanticField(field_name="customer")
             ]
@@ -160,7 +161,7 @@ except Exception:
     )
     
     # Create semantic settings with the configuration
-    semantic_settings = SemanticSettings(
+    semantic_search = SemanticSearch(
         configurations=[semantic_config],
         default_configuration="default-semantic-config"
     )
@@ -170,7 +171,7 @@ except Exception:
         name=AZURE_SEARCH_INDEX,
         fields=fields,
         scoring_profiles=[scoring_profile],
-        semantic_settings=semantic_settings
+        semantic_settings=semantic_search
     )
     index_client.create_index(index)
     print(f"Created index {AZURE_SEARCH_INDEX} with semantic configuration")
