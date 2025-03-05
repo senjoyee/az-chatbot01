@@ -6,6 +6,7 @@ on:
       - main
       - selective-search
       - code-module
+      - semantic-ranking
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'
