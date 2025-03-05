@@ -144,14 +144,14 @@ export default function Component() {
                         }`}  
                       >  
                         <ReactMarkdown   
-                          className="text-sm whitespace-pre-wrap break-words [&>*]:leading-normal [&>p]:my-0.5 last:[&>p]:mb-0 first:[&>p]:mt-0"
+                          className="text-sm whitespace-pre-wrap break-words"
                           components={{  
                             code: ({node, inline, className, children, ...props}) => (  
                               <code  
                                 className={`${
                                   inline   
                                     ? 'bg-gray-200 px-1 rounded'   
-                                    : 'block bg-gray-800 text-white p-2 rounded my-1 font-mono'  
+                                    : 'block bg-gray-800 text-white p-2 rounded font-mono'  
                                 } ${className}`}  
                                 {...props}  
                               >  
@@ -159,24 +159,24 @@ export default function Component() {
                               </code>  
                             ),  
                             p: ({children}) => (  
-                              <p className="whitespace-pre-wrap break-words leading-normal my-1">  
-                                {children}  
+                              <p className="whitespace-pre-wrap break-words">
+                                {children}
                               </p>  
                             ),  
                             h1: ({children}) => (  
-                              <h1 className="text-lg font-semibold mt-2 mb-1">{children}</h1>  
+                              <h1 className="text-lg font-semibold">{children}</h1>  
                             ),  
                             h2: ({children}) => (  
-                              <h2 className="text-base font-medium mt-2 mb-1">{children}</h2>  
+                              <h2 className="text-base font-medium">{children}</h2>  
                             ),
                             ul: ({children}) => (
-                              <ul className="list-disc pl-6 my-1">{children}</ul>
+                              <ul className="list-disc pl-6">{children}</ul>
                             ),
                             ol: ({children}) => (
-                              <ol className="list-decimal pl-6 my-1">{children}</ol>
+                              <ol className="list-decimal pl-6">{children}</ol>
                             ),
                             li: ({children}) => (
-                              <li className="my-0.5">{children}</li>
+                              <li>{children}</li>
                             )
                           }}  
                         >  

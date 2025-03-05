@@ -28,8 +28,9 @@ Instructions:
 5. Answer based only on the information in the documents above
 6. If you cannot provide a reasonable answer based solely on the documents provided, respond with: "I don't have enough information in my knowledge base to answer this question properly."
 7. Output your answer in MARKDOWN format.
-8. Include headings for sections, bullet lists for lists, and code blocks where applicable.
-9. Format your answer within <answer> tags
+8. Use proper markdown spacing - do not add extra newlines between elements.
+9. For lists, do not add blank lines between list items.
+10. Format your answer within <answer> tags
 
 <answer>
 """
