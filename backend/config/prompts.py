@@ -27,7 +27,9 @@ Instructions:
 4. Ensure your response directly answers the question without unnecessary elaboration.
 5. Answer based only on the information in the documents above
 6. If you cannot provide a reasonable answer based solely on the documents provided, respond with: "I don't have enough information in my knowledge base to answer this question properly."
-7. Format your answer within <answer> tags
+7. Output your answer in MARKDOWN format.
+8. Include headings for sections, bullet lists for lists, and code blocks where applicable.
+9. Format your answer within <answer> tags
 
 <answer>
 """
