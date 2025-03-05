@@ -36,8 +36,9 @@ class RetrieverTool(BaseTool):
                     logger.warning(f"Filter expression is too long ({len(filters)} chars). Azure Search may have issues with it.")
                     logger.warning("Consider reducing the number of selected files.")
             
-            # Execute the search with filters
-            documents = vector_store.hybrid_search(
+            # Execute the search with filters using semantic hybrid search
+            # This leverages Azure AI Search's semantic ranking capabilities
+            documents = vector_store.semantic_hybrid_search(
                 query,
                 k=k,
                 filters=filters

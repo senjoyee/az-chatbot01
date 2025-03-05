@@ -1,7 +1,5 @@
 import logging
 from typing import List, Dict, Any
-import torch
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableLambda
@@ -35,13 +33,6 @@ logger = logging.getLogger(__name__)
 
 # Initialize the tool
 retriever_tool = RetrieverTool()
-
-# Constants for reranking
-RERANKER_MODEL_NAME = "cross-encoder/ms-marco-MiniLM-L-6-v2"
-
-logger.info(f"Initializing reranking model: {RERANKER_MODEL_NAME}")
-reranker_tokenizer = AutoTokenizer.from_pretrained(RERANKER_MODEL_NAME)
-reranker_model = AutoModelForSequenceClassification.from_pretrained(RERANKER_MODEL_NAME)
 
 # Initialize the language models
 llm_4o_mini = AzureChatOpenAI(
@@ -204,35 +195,15 @@ def rerank_documents(state: AgentState) -> AgentState:
     if not documents:
         logger.info("No documents to rerank, skipping reranking step")
         return state
-
-    query = state.question
-    text_pairs = [(query, doc.page_content) for doc in documents]
-    inputs = reranker_tokenizer.batch_encode_plus(
-        text_pairs,
-        padding=True,
-        truncation=True,
-        return_tensors="pt",
-        max_length=512
-    )
-
-    with torch.no_grad():
-        scores = reranker_model(**inputs).logits.squeeze()
-
-    # Handle case when scores is a single float (only one document)
-    if isinstance(scores, float) or (torch.is_tensor(scores) and scores.dim() == 0):
-        logger.info("Only one document found, no reranking needed")
-        return state
-        
-    if torch.is_tensor(scores):
-        scores = scores.tolist()
-
-    # Ensure scores is iterable before zipping
-    if not hasattr(scores, '__iter__'):
-        scores = [scores]
-        
-    scored_docs = list(zip(documents, scores))
-    scored_docs.sort(key=lambda x: x[1], reverse=True)
-    state.documents = [doc for doc, _ in scored_docs]
+    
+    # The documents are already ranked by Azure AI Search's semantic ranking
+    # We can skip the local reranking step
+    logger.info("Documents already ranked by Azure AI Search semantic ranking")
+    logger.info(f"Using {len(documents)} documents")
+    
+    # If you want to apply additional custom ranking logic, you can do it here
+    # For now, we'll just return the documents in the order provided by Azure AI Search
+    
     return state
 
 def generate_response(state: AgentState) -> AgentState:

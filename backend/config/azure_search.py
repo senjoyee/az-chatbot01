@@ -15,6 +15,10 @@ from azure.search.documents.indexes.models import (
     SimpleField,
     TextWeights,
     SearchIndex,
+    SemanticConfiguration,
+    SemanticField,
+    SemanticSettings,
+    PrioritizedFields,
 )
 from azure.core.credentials import AzureKeyCredential
 from langchain_community.vectorstores import AzureSearch
@@ -117,7 +121,8 @@ vector_store = AzureSearch(
     embedding_function=embedding_function,
     fields=fields,
     scoring_profiles=[scoring_profile],
-    default_scoring_profile="content_source_freshness_profile"
+    default_scoring_profile="content_source_freshness_profile",
+    semantic_configuration_name="default-semantic-config"
 )
 
 # Initialize the search client
@@ -138,12 +143,37 @@ try:
     index_client.get_index(AZURE_SEARCH_INDEX)
 except Exception:
     # Create index if it doesn't exist
+    
+    # Define semantic configuration
+    semantic_config = SemanticConfiguration(
+        name="default-semantic-config",
+        prioritized_fields=PrioritizedFields(
+            title_field=SemanticField(field_name="source"),
+            prioritized_content_fields=[
+                SemanticField(field_name="content")
+            ],
+            prioritized_keywords_fields=[
+                SemanticField(field_name="metadata"),
+                SemanticField(field_name="customer")
+            ]
+        )
+    )
+    
+    # Create semantic settings with the configuration
+    semantic_settings = SemanticSettings(
+        configurations=[semantic_config],
+        default_configuration="default-semantic-config"
+    )
+    
+    # Create index with semantic settings
     index = SearchIndex(
         name=AZURE_SEARCH_INDEX,
         fields=fields,
-        scoring_profiles=[scoring_profile]
+        scoring_profiles=[scoring_profile],
+        semantic_settings=semantic_settings
     )
     index_client.create_index(index)
+    print(f"Created index {AZURE_SEARCH_INDEX} with semantic configuration")
 
 # Export these instances
 __all__ = ['vector_store', 'search_client', 'index_client', 'embeddings']
