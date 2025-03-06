@@ -82,8 +82,8 @@ export default function Component() {
   return (  
     <div className="flex h-screen bg-gray-50 p-4 gap-4 overflow-hidden font-sans">  
       {/* File Sidebar */}
-      <div className={`${sidebarVisible ? 'w-1/3' : 'w-0'} bg-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col transition-all duration-300 ease-in-out`}>
-        <div className="bg-gray-700 p-4 text-white font-medium">
+      <div className={`${sidebarVisible ? 'w-1/3' : 'w-0'} bg-[#2F3336] rounded-xl overflow-hidden shadow-lg flex flex-col transition-all duration-300 ease-in-out`}>
+        <div className="bg-[#2F3336] p-4 text-white font-medium">
           Sources
         </div>
         <div className="flex-1 overflow-hidden bg-white">
@@ -104,9 +104,9 @@ export default function Component() {
       </div>
       
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col bg-gray-800 rounded-xl overflow-hidden shadow-lg">
+      <div className="flex-1 flex flex-col bg-[#2F3336] rounded-xl overflow-hidden shadow-lg">
         <div className="flex flex-col h-full">  
-          <div className="bg-gray-500 p-4 flex justify-between items-center">
+          <div className="bg-[#2F3336] p-4 flex justify-between items-center">
             <h2 className="text-white font-medium">Document Assistant</h2>
             <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
               <Upload className="h-4 w-4 mr-1.5" />
@@ -218,7 +218,7 @@ export default function Component() {
             )}
           </ScrollArea>  
 
-          <div className="border-t p-4 bg-gray-700 rounded-b-xl">  
+          <div className="border-t p-4 bg-[#2F3336] rounded-b-xl">  
             <div className="flex items-center space-x-4">  
               <Input  
                 type="text"  
