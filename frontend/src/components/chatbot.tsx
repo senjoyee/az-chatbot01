@@ -79,27 +79,34 @@ export default function Component() {
   }
 
   return (  
-    <div className="flex h-screen bg-gradient-to-br from-gray-100 to-gray-200 overflow-hidden font-sans">  
+    <div className="flex h-screen bg-gray-900 p-4 gap-4 overflow-hidden font-sans">  
       {/* File Sidebar */}
-      <FileSidebar onFileSelectionChange={handleFileSelectionChange} />
+      <div className="w-80 bg-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col">
+        <div className="bg-gray-700 p-4 text-white font-medium">
+          Sources
+        </div>
+        <div className="flex-1 overflow-hidden">
+          <FileSidebar onFileSelectionChange={handleFileSelectionChange} />
+        </div>
+      </div>
       
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-white shadow-lg">
+      <div className="flex-1 flex flex-col bg-gray-800 rounded-xl overflow-hidden shadow-lg">
         <div className="flex flex-col h-full">  
-          <div className="bg-primary text-primary-foreground p-6">  
-            <div className="flex justify-between items-center">
-              <h2 className="text-2xl font-semibold">Document Assistant</h2>  
-              <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-white/20 hover:bg-white/30 text-primary-foreground rounded-md text-sm font-medium transition-colors">
-                <Upload className="h-4 w-4 mr-1.5" />
-                Upload Documents
-              </Link>
-            </div>
+          <div className="bg-gray-700 p-4 flex justify-between items-center">
+            <h2 className="text-white font-medium">Document Assistant</h2>
+            <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
+              <Upload className="h-4 w-4 mr-1.5" />
+              Upload Documents
+            </Link>
+          </div>
+          <div className="bg-primary text-primary-foreground p-4">  
             {selectedFiles.length > 0 ? (
-              <p className="text-sm mt-1 text-primary-foreground/80">
+              <p className="text-sm text-primary-foreground/80">
                 {selectedFiles.length} file(s) selected for context
               </p>
             ) : (
-              <p className="text-sm mt-1 text-primary-foreground/80">
+              <p className="text-sm text-primary-foreground/80">
                 No files selected. Please select at least one file to start chatting.
               </p>
             )}
@@ -111,7 +118,7 @@ export default function Component() {
             </Alert>  
           )}  
 
-          <ScrollArea className="flex-grow px-6 py-4" ref={scrollAreaRef}>  
+          <ScrollArea className="flex-grow px-6 py-4 bg-white" ref={scrollAreaRef}>  
             {selectedFiles.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center p-6">
                 <FileQuestion className="h-16 w-16 text-gray-300 mb-4" />
@@ -126,7 +133,7 @@ export default function Component() {
                 {messages.map((message) => (  
                   <div  
                     key={message.id}  
-                    className={`mb-4 flex ${  
+                    className={`mb-6 flex ${  
                       message.sender === 'user' ? 'justify-end' : 'justify-start'  
                     }`}  
                   >  
@@ -138,7 +145,7 @@ export default function Component() {
                     <div  
                       className={`inline-block p-4 rounded-lg max-w-[85%] ${  
                         message.sender === 'user'  
-                          ? 'bg-primary/80 text-primary-foreground rounded-br-none'  
+                          ? 'bg-blue-600 text-white rounded-br-none'  
                           : 'bg-gray-100 text-gray-800 rounded-bl-none'  
                       }`}  
                     >  
@@ -198,7 +205,7 @@ export default function Component() {
             )}
           </ScrollArea>  
 
-          <div className="border-t p-6 bg-gray-50">  
+          <div className="border-t p-4 bg-gray-100 rounded-b-xl">  
             <div className="flex items-center space-x-4">  
               <Input  
                 type="text"  
@@ -211,14 +218,14 @@ export default function Component() {
                     handleSend()  
                   }  
                 }}  
-                className="flex-1"  
+                className="flex-1 bg-white border-gray-300"  
                 disabled={loading || selectedFiles.length === 0}  
               />  
               <Button 
                 onClick={handleSend} 
                 disabled={loading || !input.trim() || selectedFiles.length === 0}
                 title={selectedFiles.length === 0 ? "Select at least one file to enable chat" : "Send message"}
-                className="font-medium"
+                className="font-medium bg-blue-600 hover:bg-blue-700"
               >  
                 <Send className="h-4 w-4 mr-2" />  
                 Send  

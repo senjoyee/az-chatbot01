@@ -91,12 +91,12 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
 
   if (collapsed) {
     return (
-      <div className="h-full flex flex-col border-r bg-gray-50">
+      <div className="h-full flex flex-col">
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={() => setCollapsed(false)}
-          className="m-2"
+          className="m-2 text-white hover:bg-gray-700"
         >
           <ChevronRight className="h-4 w-4" />
         </Button>
@@ -105,32 +105,8 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   }
 
   return (
-    <div className="h-full flex flex-col border-r bg-gray-50 w-1/3 font-sans">
-      <div className="p-4 border-b flex justify-between items-center">
-        <h3 className="font-medium text-sm">Indexed Files</h3>
-        <div className="flex gap-1">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={fetchFiles}
-            className="h-8 w-8"
-            title="Refresh files"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setCollapsed(true)}
-            className="h-8 w-8"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-      
-      <div className="p-2 border-b">
+    <div className="h-full flex flex-col w-full font-sans text-white">
+      <div className="flex justify-between items-center mb-2">
         <div className="flex items-center space-x-2">
           <Checkbox 
             id="select-all" 
@@ -144,10 +120,30 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
             Select All ({indexedFiles.length})
           </label>
         </div>
+        <div className="flex gap-1">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={fetchFiles}
+            className="h-8 w-8 hover:bg-gray-700"
+            title="Refresh files"
+          >
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => setCollapsed(true)}
+            className="h-8 w-8 hover:bg-gray-700"
+            title="Collapse sidebar"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
       
       {/* Help text */}
-      <div className="p-2 bg-blue-50 text-blue-700 text-xs border-b">
+      <div className="p-2 bg-gray-700/50 text-gray-300 text-xs mb-2 rounded">
         <div className="flex items-start gap-2">
           <FileQuestion className="h-4 w-4 flex-shrink-0 mt-0.5" />
           <div>
@@ -169,11 +165,11 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
         ) : error ? (
           <div className="p-4 text-sm text-red-500">{error}</div>
         ) : indexedFiles.length === 0 ? (
-          <div className="p-4 text-sm text-gray-500">No indexed files found</div>
+          <div className="p-4 text-sm text-gray-400">No indexed files found</div>
         ) : (
           <div className="p-2 space-y-1">
             {indexedFiles.map((file) => (
-              <div key={file.id} className="flex items-center space-x-2 p-2 hover:bg-gray-100 rounded">
+              <div key={file.id} className="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded">
                 <Checkbox 
                   id={`file-${file.id}`}
                   checked={selectedFiles.includes(file.id)}
@@ -181,7 +177,7 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                 />
                 <label 
                   htmlFor={`file-${file.id}`}
-                  className="text-sm leading-none truncate flex-1 cursor-pointer"
+                  className="text-sm leading-none truncate flex-1 cursor-pointer text-gray-200"
                   title={file.name}
                 >
                   {file.name}
