@@ -219,7 +219,7 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm_4o_mini
+        | llm_o3_mini
         | StrOutputParser()
     )
     response = _input.invoke(state)

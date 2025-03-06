@@ -59,9 +59,7 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
 
   useEffect(() => {
     fetchFiles()
-    // Set up polling interval to refresh the file list every 30 seconds
-    const interval = setInterval(fetchFiles, 30000)
-    return () => clearInterval(interval)
+    // Remove the polling interval - only refresh when button is clicked
   }, [])
 
   const handleFileSelection = (fileId: string) => {
