@@ -10,6 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { FileSidebar } from "@/components/ui/file-sidebar"
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'  
+import remarkGfm from 'remark-gfm'
 import { sendMessage } from "./api";  
 
 interface Message {  
@@ -163,7 +164,8 @@ export default function Component() {
                       }`}  
                     >  
                       <ReactMarkdown   
-                        className="text-sm whitespace-pre-wrap break-words"
+                        className="text-sm"
+                        remarkPlugins={[remarkGfm]}
                         components={{  
                           code: ({node, inline, className, children, ...props}) => (  
                             <code  
@@ -178,25 +180,26 @@ export default function Component() {
                             </code>  
                           ),  
                           p: ({children}) => (  
-                            <p className="whitespace-pre-wrap break-words">
+                            <p className="mb-2 whitespace-pre-line">
                               {children}
                             </p>  
                           ),  
                           h1: ({children}) => (  
-                            <h1 className="text-lg font-semibold">{children}</h1>  
+                            <h1 className="text-lg font-semibold mb-2">{children}</h1>  
                           ),  
                           h2: ({children}) => (  
-                            <h2 className="text-base font-medium">{children}</h2>  
+                            <h2 className="text-base font-medium mb-2">{children}</h2>  
                           ),
                           ul: ({children}) => (
-                            <ul className="list-disc pl-6">{children}</ul>
+                            <ul className="list-disc pl-6 mb-2 space-y-1">{children}</ul>
                           ),
                           ol: ({children}) => (
-                            <ol className="list-decimal pl-6">{children}</ol>
+                            <ol className="list-decimal pl-6 mb-2 space-y-1">{children}</ol>
                           ),
                           li: ({children}) => (
-                            <li>{children}</li>
-                          )
+                            <li className="mb-1">{children}</li>
+                          ),
+                          br: () => <br />
                         }}  
                       >  
                         {message.text}  
