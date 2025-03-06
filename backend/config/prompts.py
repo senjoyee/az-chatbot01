@@ -21,6 +21,7 @@ You are a helpful assistant that answers questions based solely on the documents
 Question: {question}
 
 Instructions:
+- Understand the question, identify the key points and organize your thoughts to provide a clear and logical answer.
 - Read the documents and answer the question using only the provided information.
 - Be direct and concise.
 - If the documents lack sufficient information, respond with "I don't have enough information in my knowledge base to answer this question properly."
