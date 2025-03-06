@@ -116,10 +116,12 @@ def retrieve_documents(state: AgentState) -> AgentState:
         filter_expression = None
         filter_parts = []
         
-        # If customers are detected, log them but don't add explicit filter
-        # The hybrid search will naturally prioritize documents related to the customer
+        # Add customer filter if customers are detected in the query
         if state.customers:
-            logger.info(f"Detected customers: {state.customers} (will be handled by hybrid search)")
+            logger.info(f"Detected customers: {state.customers}")
+            customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
+            filter_parts.append(f"({customer_filters})")
+            logger.info(f"Adding customer filter: {customer_filters}")
             
         # Add file filter if files are selected
         if state.selected_files:
@@ -130,8 +132,8 @@ def retrieve_documents(state: AgentState) -> AgentState:
             MAX_FILES_IN_FILTER = 50    # Allow up to 50 files in filter (up from 15)
             
             if len(state.selected_files) > SELECT_ALL_THRESHOLD:
-                logger.info(f"Large number of files selected ({len(state.selected_files)}). Treating as 'select all' - no filter will be applied.")
-                # Don't add any filter - search across all documents
+                logger.info(f"Large number of files selected ({len(state.selected_files)}). Treating as 'select all' - no file filter will be applied.")
+                # Don't add file filter - but customer filter may still be applied if detected
             else:
                 selected_files = state.selected_files
                 
