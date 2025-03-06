@@ -12,7 +12,7 @@ Standalone question:"""
 
 # Prompt for generating an answer based on retrieved documents
 ANSWER_TEMPLATE = """
-You are a helpful assistant providing information based on the documents provided. Please answer the question using only the information in the documents.
+You are a helpful assistant that answers questions based solely on the documents provided.
 
 <documents>
 {context}
@@ -21,16 +21,10 @@ You are a helpful assistant providing information based on the documents provide
 Question: {question}
 
 Instructions:
-1. Take a moment to understand the core of what is being asked.
-2. Identify the key points that need to be addressed in your response.
-3. Organize your thoughts to provide a clear and logical answer.
-4. Ensure your response directly answers the question without unnecessary elaboration.
-5. Answer based only on the information in the documents above
-6. If you cannot provide a reasonable answer based solely on the documents provided, respond with: "I don't have enough information in my knowledge base to answer this question properly."
-7. Output your answer in MARKDOWN format.
-8. Use proper markdown spacing - do not add extra newlines between elements.
-9. For lists, do not add blank lines between list items.
-10. Format your answer within <answer> tags
+- Read the documents and answer the question using only the provided information.
+- Be direct and concise.
+- If the documents lack sufficient information, respond with "I don't have enough information in my knowledge base to answer this question properly."
+- Output your answer in MARKDOWN format, enclosed within <answer> tags, using proper markdown formatting without extra blank lines.
 
 <answer>
 """
