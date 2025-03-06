@@ -3,10 +3,9 @@
 import React, { useState, useEffect } from 'react'
 import { listFiles } from '../api'
 import { FileItem, FileProcessingStatus } from '../types'
-import { Checkbox } from './checkbox'
-import { ScrollArea } from './scroll-area'
 import { Button } from './button'
-import { ChevronLeft, ChevronRight, RefreshCw, FileQuestion } from 'lucide-react'
+import { ScrollArea } from './scroll-area'
+import { RefreshCw, FileIcon, CheckCircle, ChevronRight } from 'lucide-react'
 
 interface FileSidebarProps {
   onFileSelectionChange?: (selectedFiles: string[]) => void
@@ -18,7 +17,7 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
-  
+
   // Only show completed files
   const indexedFiles = files.filter(file => file.status === FileProcessingStatus.COMPLETED)
 
@@ -28,26 +27,26 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
       setError(null)
       // Get all files, with a large page size to ensure we get everything
       const response = await listFiles(1, 100)
-      
+
       if (!response || !Array.isArray(response.files)) {
         throw new Error('Invalid response from server')
       }
-      
+
       const mappedFiles = response.files.map((file: any) => ({
         id: file.name,
         name: file.name,
         size: file.size || 0,
         uploadDate: new Date(file.lastModified || Date.now()),
-        status: file.status ? 
-          (typeof file.status === 'string' ? 
-            FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] : 
-            file.status) : 
+        status: file.status ?
+          (typeof file.status === 'string' ?
+            FileProcessingStatus[file.status.toUpperCase() as keyof typeof FileProcessingStatus] :
+            file.status) :
           FileProcessingStatus.NOT_STARTED,
         errorMessage: file.errorMessage,
         processingStartTime: file.processingStartTime,
         processingEndTime: file.processingEndTime
       }))
-      
+
       setFiles(mappedFiles)
     } catch (error) {
       console.error('Error fetching files:', error)
@@ -67,12 +66,12 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
       const newSelection = prev.includes(fileId)
         ? prev.filter(id => id !== fileId)
         : [...prev, fileId]
-      
+
       // Notify parent component if callback is provided
       if (onFileSelectionChange) {
         onFileSelectionChange(newSelection)
       }
-      
+
       return newSelection
     })
   }
@@ -80,21 +79,32 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   const handleSelectAll = () => {
     const allFileIds = indexedFiles.map(file => file.id)
     const newSelection = selectedFiles.length === indexedFiles.length ? [] : allFileIds
-    
+
     setSelectedFiles(newSelection)
-    
+
     // Notify parent component if callback is provided
     if (onFileSelectionChange) {
       onFileSelectionChange(newSelection)
     }
   }
 
+  const handleClearSelection = () => {
+    setSelectedFiles([])
+    if (onFileSelectionChange) {
+      onFileSelectionChange([])
+    }
+  }
+
+  const handleRefresh = () => {
+    fetchFiles()
+  }
+
   if (collapsed) {
     return (
       <div className="h-full flex flex-col">
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           onClick={() => setCollapsed(false)}
           className="m-2 text-white hover:bg-gray-700"
         >
@@ -105,88 +115,92 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   }
 
   return (
-    <div className="h-full flex flex-col w-full font-sans text-white">
-      <div className="flex justify-between items-center mb-2">
-        <div className="flex items-center space-x-2">
-          <Checkbox 
-            id="select-all" 
-            checked={selectedFiles.length === indexedFiles.length && indexedFiles.length > 0}
-            onCheckedChange={handleSelectAll}
-          />
-          <label 
-            htmlFor="select-all" 
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-          >
-            Select All ({indexedFiles.length})
-          </label>
-        </div>
-        <div className="flex gap-1">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={fetchFiles}
-            className="h-8 w-8 hover:bg-gray-700"
-            title="Refresh files"
+    <ScrollArea className="h-full flex flex-col w-full font-sans">
+      <div className="p-4">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center">
+            <Button
+              variant="outline"
+              size="sm"
+              className={`mr-2 ${selectedFiles.length === indexedFiles.length ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-white text-gray-700 hover:bg-gray-100'}`}
+              onClick={handleSelectAll}
+            >
+              Select All ({indexedFiles.length})
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="bg-white text-gray-700 hover:bg-gray-100"
+              onClick={handleClearSelection}
+              disabled={selectedFiles.length === 0}
+            >
+              Clear
+            </Button>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="bg-white text-gray-700 hover:bg-gray-100"
+            onClick={handleRefresh}
           >
             <RefreshCw className="h-4 w-4" />
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => setCollapsed(true)}
-            className="h-8 w-8 hover:bg-gray-700"
-            title="Collapse sidebar"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
         </div>
-      </div>
-      
-      {/* Help text */}
-      <div className="p-2 bg-gray-700/50 text-gray-300 text-xs mb-2 rounded">
-        <div className="flex items-start gap-2">
-          <FileQuestion className="h-4 w-4 flex-shrink-0 mt-0.5" />
-          <div>
-            <p>Select one or more files to provide context for the chatbot. At least one file must be selected to enable chat.</p>
-            <p className="mt-1">For best results:</p>
-            <ul className="list-disc ml-4 mt-0.5">
-              <li>Select up to 50 specific files for targeted searches</li>
-              <li>Use "Select All" to search across the entire database</li>
-            </ul>
-          </div>
+
+        <div className="mb-4 text-sm text-gray-600 bg-gray-100 p-3 rounded-lg">
+          <p className="font-medium mb-1">For best results:</p>
+          <ul className="list-disc pl-5 space-y-1">
+            <li>Select up to 50 specific files for targeted searches</li>
+            <li>Use "Select All" to search across the entire database</li>
+          </ul>
         </div>
-      </div>
-      
-      <ScrollArea className="flex-1">
+
         {loading ? (
-          <div className="flex justify-center items-center p-4">
-            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-primary"></div>
+          <div className="flex justify-center items-center h-20">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-700"></div>
           </div>
         ) : error ? (
-          <div className="p-4 text-sm text-red-500">{error}</div>
+          <div className="text-red-500 p-4 border border-red-200 rounded-md bg-red-50">
+            {error}
+          </div>
         ) : indexedFiles.length === 0 ? (
-          <div className="p-4 text-sm text-gray-400">No indexed files found</div>
+          <div className="text-gray-500 p-4 text-center">
+            No indexed files found
+          </div>
         ) : (
-          <div className="p-2 space-y-1">
+          <div className="space-y-1">
             {indexedFiles.map((file) => (
-              <div key={file.id} className="flex items-center space-x-2 p-2 hover:bg-gray-700 rounded">
-                <Checkbox 
-                  id={`file-${file.id}`}
-                  checked={selectedFiles.includes(file.id)}
-                  onCheckedChange={() => handleFileSelection(file.id)}
-                />
-                <label 
-                  htmlFor={`file-${file.id}`}
-                  className="text-sm leading-none truncate flex-1 cursor-pointer text-gray-200"
-                  title={file.name}
-                >
-                  {file.name}
-                </label>
+              <div
+                key={file.id}
+                className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
+                  selectedFiles.includes(file.id)
+                    ? 'bg-blue-100 text-blue-800'
+                    : 'hover:bg-gray-100 text-gray-700'
+                }`}
+                onClick={() => handleFileSelection(file.id)}
+              >
+                <div className="flex-shrink-0 mr-2">
+                  <FileIcon className="h-5 w-5 text-gray-500" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">
+                    {file.name}
+                  </p>
+                </div>
+                <div className="ml-2">
+                  <CheckCircle
+                    className={`h-4 w-4 ${
+                      selectedFiles.includes(file.id)
+                        ? 'text-blue-600'
+                        : 'text-gray-300'
+                    }`}
+                  />
+                </div>
               </div>
             ))}
           </div>
         )}
-      </ScrollArea>
-    </div>
+      </div>
+    </ScrollArea>
   )
 }

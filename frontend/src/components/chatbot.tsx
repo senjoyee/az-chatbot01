@@ -1,7 +1,7 @@
 'use client'  
 
 import { useState, useRef, useEffect } from 'react'  
-import { Send, FileQuestion, Upload } from 'lucide-react'  
+import { Send, FileQuestion, Upload, ChevronLeft, ChevronRight } from 'lucide-react'  
 import { Button } from "@/components/ui/button"  
 import { Input } from "@/components/ui/input"  
 import { ScrollArea } from "@/components/ui/scroll-area"  
@@ -26,6 +26,7 @@ export default function Component() {
   const [loading, setLoading] = useState(false)  
   const [error, setError] = useState<string | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
+  const [sidebarVisible, setSidebarVisible] = useState(true)
   const scrollAreaRef = useRef<HTMLDivElement>(null)  
 
   useEffect(() => {  
@@ -81,13 +82,25 @@ export default function Component() {
   return (  
     <div className="flex h-screen bg-gray-900 p-4 gap-4 overflow-hidden font-sans">  
       {/* File Sidebar */}
-      <div className="w-80 bg-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col">
+      <div className={`${sidebarVisible ? 'w-1/3' : 'w-0'} bg-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col transition-all duration-300 ease-in-out`}>
         <div className="bg-gray-700 p-4 text-white font-medium">
           Sources
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="flex-1 overflow-hidden bg-white">
           <FileSidebar onFileSelectionChange={handleFileSelectionChange} />
         </div>
+      </div>
+      
+      {/* Sidebar Toggle Button */}
+      <div className="flex items-center">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => setSidebarVisible(!sidebarVisible)}
+          className="h-8 w-8 rounded-full bg-gray-700 text-white hover:bg-gray-600"
+        >
+          {sidebarVisible ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+        </Button>
       </div>
       
       {/* Chat Area */}
@@ -100,13 +113,13 @@ export default function Component() {
               Upload Documents
             </Link>
           </div>
-          <div className="bg-primary text-primary-foreground p-4">  
+          <div className="bg-gray-700 text-gray-200 p-4">  
             {selectedFiles.length > 0 ? (
-              <p className="text-sm text-primary-foreground/80">
+              <p className="text-sm text-gray-200">
                 {selectedFiles.length} file(s) selected for context
               </p>
             ) : (
-              <p className="text-sm text-primary-foreground/80">
+              <p className="text-sm text-gray-200">
                 No files selected. Please select at least one file to start chatting.
               </p>
             )}
@@ -205,7 +218,7 @@ export default function Component() {
             )}
           </ScrollArea>  
 
-          <div className="border-t p-4 bg-gray-100 rounded-b-xl">  
+          <div className="border-t p-4 bg-gray-700 rounded-b-xl">  
             <div className="flex items-center space-x-4">  
               <Input  
                 type="text"  
