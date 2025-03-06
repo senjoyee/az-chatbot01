@@ -80,7 +80,7 @@ export default function Component() {
   }
 
   return (  
-    <div className="flex h-screen bg-gray-900 p-4 gap-4 overflow-hidden font-sans">  
+    <div className="flex h-screen bg-gray-50 p-4 gap-4 overflow-hidden font-sans">  
       {/* File Sidebar */}
       <div className={`${sidebarVisible ? 'w-1/3' : 'w-0'} bg-gray-800 rounded-xl overflow-hidden shadow-lg flex flex-col transition-all duration-300 ease-in-out`}>
         <div className="bg-gray-700 p-4 text-white font-medium">
