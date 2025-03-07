@@ -164,7 +164,7 @@ export default function Component() {
                       }`}  
                     >  
                       <ReactMarkdown   
-                        className="text-sm"
+                        className="text-sm font-medium"
                         remarkPlugins={[remarkGfm]}
                         components={{  
                           code: ({node, inline, className, children, ...props}) => (  
