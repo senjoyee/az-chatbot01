@@ -29,11 +29,13 @@ export default function Component() {
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const scrollAreaRef = useRef<HTMLDivElement>(null)  
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {  
-    if (scrollAreaRef.current) {  
-      scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight  
-    }  
+    // Scroll to bottom whenever messages change
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])  
 
   const handleSend = async () => {  
@@ -213,7 +215,9 @@ export default function Component() {
                       </Avatar>  
                     )}  
                   </div>  
-                ))}  
+                ))}
+                {/* This empty div is used as a target for auto-scrolling */}
+                <div ref={messagesEndRef} />
                 {loading && (  
                   <div className="flex items-center space-x-2 text-gray-500 mt-2">  
                     <div className="animate-pulse">Thinking...</div>  
