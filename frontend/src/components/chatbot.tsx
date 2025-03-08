@@ -114,7 +114,7 @@ export default function Component() {
               Upload Documents
             </Link>
           </div>
-          <div className="bg-[#1E2022] text-gray-200 p-4">  
+          <div className="bg-[#2F3336] text-gray-200 p-4 border-t border-gray-700">  
             {selectedFiles.length > 0 ? (
               <p className="text-sm text-gray-200">
                 {selectedFiles.length} file(s) selected for context
