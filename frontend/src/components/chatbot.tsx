@@ -107,24 +107,26 @@ export default function Component() {
       {/* Chat Area */}
       <div className="flex-1 flex flex-col bg-[#2F3336] rounded-xl overflow-hidden shadow-lg">
         <div className="flex flex-col h-full">  
-          <div className="bg-[#2F3336] p-4 flex justify-between items-center">
-            <h2 className="text-white font-medium">Document Assistant</h2>
-            <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
-              <Upload className="h-4 w-4 mr-1.5" />
-              Upload Documents
-            </Link>
+          <div className="bg-[#2F3336] p-4 flex flex-col">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-white font-medium">Document Assistant</h2>
+              <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
+                <Upload className="h-4 w-4 mr-1.5" />
+                Upload Documents
+              </Link>
+            </div>
+            <div className="text-gray-200">  
+              {selectedFiles.length > 0 ? (
+                <p className="text-sm text-gray-200">
+                  {selectedFiles.length} file(s) selected for context
+                </p>
+              ) : (
+                <p className="text-sm text-gray-200">
+                  No files selected. Please select at least one file to start chatting.
+                </p>
+              )}
+            </div>  
           </div>
-          <div className="bg-[#2F3336] text-gray-200 p-4 border-t border-gray-700">  
-            {selectedFiles.length > 0 ? (
-              <p className="text-sm text-gray-200">
-                {selectedFiles.length} file(s) selected for context
-              </p>
-            ) : (
-              <p className="text-sm text-gray-200">
-                No files selected. Please select at least one file to start chatting.
-              </p>
-            )}
-          </div>  
 
           {error && (  
             <Alert variant="destructive" className="m-4">  
