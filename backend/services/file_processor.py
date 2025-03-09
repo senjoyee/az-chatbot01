@@ -8,6 +8,7 @@ from azure.storage.blob import BlobServiceClient
 from unstructured.partition.docx import partition_docx
 from unstructured.partition.pdf import partition_pdf
 from unstructured.partition.xlsx import partition_xlsx
+from unstructured.partition.pptx import partition_pptx
 from unstructured.chunking.title import chunk_by_title
 from fastapi import HTTPException
 
@@ -83,8 +84,11 @@ class FileProcessor:
                             elements = partition_xlsx(filename=temp_file_path)
                             elements = process_excel_elements(elements)  # Process Excel elements
                             logger.info(f"XLSX Partitioning - Number of elements: {len(elements)}")
+                        elif file_extension in ['.ppt', '.pptx']:
+                            elements = partition_pptx(filename=temp_file_path)
+                            logger.info(f"PPTX Partitioning - Number of elements: {len(elements)}")
                         else:
-                            supported_formats = ['.pdf', '.doc', '.docx', '.xlsx', '.xls']
+                            supported_formats = ['.pdf', '.doc', '.docx', '.xlsx', '.xls', '.ppt', '.pptx']
                             raise ValueError(f"Unsupported file type: {file_extension}. Supported formats are: {', '.join(supported_formats)}")
                         chunks = chunk_by_title(elements, max_characters=5000, new_after_n_chars=6000)
                         logger.info(f"Created {len(chunks)} chunks from {file_name}")

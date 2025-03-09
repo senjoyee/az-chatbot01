@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Upload, Trash2, File, Info, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { uploadFiles, deleteFile, listFiles, getFileStatus, getFilesStatus } from './api'
+import { uploadFiles, deleteFile, listFiles, getFileStatus } from './api'
 import { FileProcessingStatus, FileItem, FileWithCustomer } from './types'
 import { useFileStatusPolling } from './hooks/useFileStatusPolling'
 import { StatusIndicator } from './ui/status-indicator'
@@ -98,7 +98,18 @@ export default function DocumentUploadService() {
     setFilesToUpload(acceptedFiles.map(file => ({ file, customerName: '' })))
   }, [])
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop })
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({ 
+    onDrop,
+    accept: {
+      'application/pdf': ['.pdf'],
+      'application/msword': ['.doc'],
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+      'application/vnd.ms-excel': ['.xls'],
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx'],
+      'application/vnd.ms-powerpoint': ['.ppt'],
+      'application/vnd.openxmlformats-officedocument.presentationml.presentation': ['.pptx']
+    }
+  })
 
   const handleCustomerNameChange = (index: number, customerName: string) => {
     setFilesToUpload(prev => 
@@ -263,6 +274,9 @@ export default function DocumentUploadService() {
             <Upload className="mx-auto h-12 w-12 text-muted-foreground/50" />
             <p className="mt-2 text-sm text-muted-foreground font-medium">
               Drag 'n' drop some documents here, or click to select files
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Supported formats: PDF, Word (.doc, .docx), Excel (.xls, .xlsx), PowerPoint (.ppt, .pptx)
             </p>
           </div>
 
