@@ -7,6 +7,7 @@ on:
       - selective-search
       - code-module
       - semantic-ranking
+      - summarizer
     paths:
       - 'backend/**'
       - '.github/workflows/backend-deploy.yml'
