@@ -137,14 +137,14 @@ def retrieve_documents(state: AgentState) -> AgentState:
         filter_parts = []
         
         # Add customer filter if customers are detected in the query
-        if state.customers:
+        if state.customers and len(state.customers) > 0:
             logger.info(f"Detected customers: {state.customers}")
             customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
             filter_parts.append(f"({customer_filters})")
             logger.info(f"Adding customer filter: {customer_filters}")
             
         # Add file filter if files are selected
-        if state.selected_files:
+        if state.selected_files and len(state.selected_files) > 0:
             # Check if this is effectively a "select all" scenario
             # We'll use a threshold to determine if the user has selected a large number of files
             # which would be equivalent to searching the entire database
@@ -336,14 +336,14 @@ def retrieve_documents_for_summary(state: AgentState) -> AgentState:
         filter_parts = []
         
         # Add customer filter if customers are detected in the query
-        if state.customers:
+        if state.customers and len(state.customers) > 0:
             logger.info(f"Detected customers for summary: {state.customers}")
             customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
             filter_parts.append(f"({customer_filters})")
             logger.info(f"Adding customer filter for summary: {customer_filters}")
             
         # Add file filter if files are selected
-        if state.selected_files:
+        if state.selected_files and len(state.selected_files) > 0:
             # Check if this is effectively a "select all" scenario
             SELECT_ALL_THRESHOLD = 100  # If more than this many files are selected, treat as "select all"
             MAX_FILES_IN_FILTER = 50    # Allow up to 50 files in filter
@@ -362,7 +362,7 @@ def retrieve_documents_for_summary(state: AgentState) -> AgentState:
                 file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in selected_files])
                 filter_parts.append(f"({file_filters})")
                 logger.info(f"Adding file filter for summary: {len(selected_files)} files")
-            
+        
         # Combine filters if present
         if filter_parts:
             filter_expression = " and ".join(filter_parts)
