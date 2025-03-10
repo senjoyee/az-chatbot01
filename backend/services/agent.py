@@ -23,7 +23,8 @@ from config.prompts import (
     CONDENSE_QUESTION_PROMPT,
     ANSWER_PROMPT,
     CONVERSATION_PROMPT,
-    DECISION_PROMPT
+    DECISION_PROMPT,
+    SUMMARY_PROMPT
 )
 
 from config.azure_search import vector_store
@@ -67,6 +68,25 @@ def detect_customers(query: str) -> List[str]:
     """
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
+
+def is_summary_request(query: str) -> bool:
+    """
+    Detect if the user is asking for a document summary.
+    Returns True if the query appears to be requesting a summary.
+    """
+    query_lower = query.lower()
+    summary_keywords = [
+        "summarize", "summary", "summarize this document", 
+        "give me a summary", "can you summarize", 
+        "provide a summary", "overview of this document",
+        "key points", "main points", "tldr", "tl;dr"
+    ]
+    
+    for keyword in summary_keywords:
+        if keyword in query_lower:
+            return True
+    
+    return False
 
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
@@ -213,18 +233,52 @@ def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
     TOP_K_DOCUMENTS = 10
     top_documents = state.documents[:TOP_K_DOCUMENTS]
-    context = "\n\n".join(doc.page_content for doc in top_documents)
+    
+    # Check if this is a summary request
+    is_summary = is_summary_request(state.question)
+    logger.info(f"Request identified as summary request: {is_summary}")
+    
+    # Prepare context differently based on request type
+    if is_summary:
+        # For summaries, include document metadata to provide better structure
+        context_parts = []
+        for i, doc in enumerate(top_documents):
+            # Include document metadata if available
+            source = doc.metadata.get('source', 'Unknown document')
+            title = doc.metadata.get('title', f'Document {i+1}')
+            
+            # Format with metadata
+            context_parts.append(f"## {title}\nSource: {source}\n\n{doc.page_content}")
+        
+        context = "\n\n".join(context_parts)
+    else:
+        # For regular questions, use the standard approach
+        context = "\n\n".join(doc.page_content for doc in top_documents)
+    
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
 
-    _input = (
-        RunnableLambda(lambda x: {
-            "context": context,
-            "question": x.question
-        })
-        | ANSWER_PROMPT
-        | llm_o3_mini
-        | StrOutputParser()
-    )
+    # Use different prompts based on request type
+    if is_summary:
+        _input = (
+            RunnableLambda(lambda x: {
+                "context": context,
+                "question": x.question
+            })
+            | SUMMARY_PROMPT  # Use the specialized summary prompt
+            | llm_o3_mini
+            | StrOutputParser()
+        )
+    else:
+        _input = (
+            RunnableLambda(lambda x: {
+                "context": context,
+                "question": x.question
+            })
+            | ANSWER_PROMPT
+            | llm_o3_mini
+            | StrOutputParser()
+        )
+    
     response = _input.invoke(state)
     cleaned_response = response.replace("<answer>", "").replace("</answer>", "").strip()
     

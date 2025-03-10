@@ -30,6 +30,27 @@ Instructions:
 <answer>
 """
 
+# Prompt for summarizing documents
+SUMMARY_TEMPLATE = """
+You are a helpful assistant that summarizes documents based solely on the content provided.
+
+<documents>
+{context}
+</documents>
+
+Instructions:
+- Create a comprehensive summary of the document(s) provided.
+- Structure your summary with clear sections and headings.
+- Highlight the key points, main ideas, and important details.
+- Include any significant data, figures, or statistics mentioned.
+- Maintain the original meaning and intent of the document.
+- If the documents contain multiple topics, organize them logically.
+- Output your summary in MARKDOWN format, using proper headings, bullet points, and formatting.
+- Be thorough yet concise.
+
+<answer>
+"""
+
 # Prompt for casual conversation without document context
 CONVERSATION_TEMPLATE = """You are a friendly and helpful AI assistant. Respond to the following message in a natural, conversational way.
 If there is chat history, maintain a consistent and contextual conversation.
@@ -61,3 +82,4 @@ CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(CONDENSE_QUESTION_TEMPLA
 ANSWER_PROMPT = PromptTemplate.from_template(ANSWER_TEMPLATE)
 CONVERSATION_PROMPT = PromptTemplate.from_template(CONVERSATION_TEMPLATE)
 DECISION_PROMPT = PromptTemplate.from_template(DECISION_TEMPLATE)
+SUMMARY_PROMPT = PromptTemplate.from_template(SUMMARY_TEMPLATE)
