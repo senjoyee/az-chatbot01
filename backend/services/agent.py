@@ -331,45 +331,30 @@ def retrieve_documents_for_summary(state: AgentState) -> AgentState:
     """
     logger.info(f"Retrieving documents for summary: {state.question}")
     try:
+        # For summarization, only allow a single document
+        if state.selected_files and len(state.selected_files) > 1:
+            logger.info(f"Multiple files selected for summary ({len(state.selected_files)}). Limiting to single document only.")
+            state.response = "I can only summarize one document at a time. Please select a single document for summarization."
+            state.should_stop = True
+            return state
+        
         # Build filters based on available criteria - similar to retrieve_documents
         filter_expression = None
         filter_parts = []
         
-        # Add customer filter if customers are detected in the query
-        if state.customers and len(state.customers) > 0:
-            logger.info(f"Detected customers for summary: {state.customers}")
-            customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
-            filter_parts.append(f"({customer_filters})")
-            logger.info(f"Adding customer filter for summary: {customer_filters}")
-            
+        # For summarization, we only use file filters, not customer filters
+        
         # Add file filter if files are selected
-        if state.selected_files and len(state.selected_files) > 0:
-            # For summarization, limit to 50 files maximum
-            MAX_FILES_IN_FILTER = 50
-            
-            # Check if more than 50 files are selected
-            if len(state.selected_files) > MAX_FILES_IN_FILTER:
-                logger.warning(f"Too many files selected for summary ({len(state.selected_files)}). Limiting to {MAX_FILES_IN_FILTER} files.")
-                state.response = "Select 50 files or less for summary."
-                state.should_stop = True
-                return state
-            
+        if state.selected_files and len(state.selected_files) == 1:
             # Escape single quotes by doubling them
-            file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in state.selected_files])
+            file_filters = f"source eq '{state.selected_files[0].replace(chr(39), chr(39)*2)}'"
             filter_parts.append(f"({file_filters})")
-            logger.info(f"Adding file filter for summary: {len(state.selected_files)} files")
+            logger.info(f"Adding file filter for summary: {state.selected_files[0]}")
         
         # Combine filters if present
         if filter_parts:
             filter_expression = " and ".join(filter_parts)
             logger.info(f"Combined filter expression for summary: {filter_expression}")
-            
-            # Log the length of the filter expression to check if it's too long
-            logger.info(f"Filter expression length for summary: {len(filter_expression)}")
-            
-            # If filter expression is very long, log a warning
-            if len(filter_expression) > 10000:
-                logger.warning("Filter expression for summary is very long, which might cause issues with Azure Search")
         else:
             logger.info("No filters applied for summary - searching across all documents")
         
@@ -397,7 +382,7 @@ def retrieve_documents_for_summary(state: AgentState) -> AgentState:
         except Exception as e:
             logger.error(f"Error calling retriever tool for summary: {str(e)}")
             state.documents = []
-            state.response = "An error occurred while retrieving documents for summarization. Select 50 files or less for summary."
+            state.response = "An error occurred while retrieving documents for summarization."
             state.should_stop = True
             return state
     except Exception as e:
