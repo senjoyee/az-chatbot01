@@ -48,3 +48,4 @@ class AgentState(BaseModel):
     should_stop: bool = False
     needs_casual_response: bool = False
     customer_reminder_sent: bool = False
+    is_summary_request: bool = False  # New field to track summary requests
