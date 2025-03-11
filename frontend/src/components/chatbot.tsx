@@ -1,13 +1,14 @@
 'use client'  
 
 import { useState, useRef, useEffect } from 'react'  
-import { Send, FileQuestion, Upload, ChevronLeft, ChevronRight } from 'lucide-react'  
+import { Send, FileQuestion, Upload, ChevronLeft, ChevronRight, Copy } from 'lucide-react'  
 import { Button } from "@/components/ui/button"  
 import { Input } from "@/components/ui/input"  
 import { ScrollArea } from "@/components/ui/scroll-area"  
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"  
 import { Alert, AlertDescription } from "@/components/ui/alert"  
 import { FileSidebar } from "@/components/ui/file-sidebar"
+import { toast } from 'sonner'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'  
 import remarkGfm from 'remark-gfm'
@@ -165,49 +166,65 @@ export default function Component() {
                         message.sender === 'user'  
                           ? 'bg-blue-600 text-white rounded-br-none'  
                           : 'bg-gray-100 text-gray-800 rounded-bl-none'  
-                      }`}  
+                      } ${message.sender === 'assistant' ? 'group' : ''}`}  
                     >  
-                      <ReactMarkdown   
-                        className="text-sm font-medium"
-                        remarkPlugins={[remarkGfm]}
-                        components={{  
-                          code: ({node, inline, className, children, ...props}) => (  
-                            <code  
-                              className={`${
-                                inline   
-                                  ? 'bg-gray-200 px-1 rounded'   
-                                  : 'block bg-gray-800 text-white p-2 rounded font-mono'  
-                              } ${className}`}  
-                              {...props}  
-                            >  
-                              {children}  
-                            </code>  
-                          ),  
-                          p: ({children}) => (  
-                            <p className="mb-2 whitespace-pre-line">
-                              {children}
-                            </p>  
-                          ),  
-                          h1: ({children}) => (  
-                            <h1 className="text-lg font-semibold mb-2">{children}</h1>  
-                          ),  
-                          h2: ({children}) => (  
-                            <h2 className="text-base font-medium mb-2">{children}</h2>  
-                          ),
-                          ul: ({children}) => (
-                            <ul className="list-disc pl-6 mb-2 space-y-1">{children}</ul>
-                          ),
-                          ol: ({children}) => (
-                            <ol className="list-decimal pl-6 mb-2 space-y-1">{children}</ol>
-                          ),
-                          li: ({children}) => (
-                            <li className="mb-1">{children}</li>
-                          ),
-                          br: () => <br />
-                        }}  
-                      >  
-                        {message.text}  
-                      </ReactMarkdown>  
+                      <div className="relative">
+                        {message.sender === 'assistant' && (
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="absolute top-0 right-0 h-6 w-6 opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity"
+                            onClick={() => {
+                              navigator.clipboard.writeText(message.text);
+                              toast.success("Copied to clipboard");
+                            }}
+                            title="Copy to clipboard"
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        )}
+                        <ReactMarkdown   
+                          className="text-sm font-medium"
+                          remarkPlugins={[remarkGfm]}
+                          components={{  
+                            code: ({node, inline, className, children, ...props}) => (  
+                              <code  
+                                className={`${
+                                  inline   
+                                    ? 'bg-gray-200 px-1 rounded'   
+                                    : 'block bg-gray-800 text-white p-2 rounded font-mono'  
+                                } ${className}`}  
+                                {...props}  
+                              >  
+                                {children}  
+                              </code>  
+                            ),  
+                            p: ({children}) => (  
+                              <p className="mb-2 whitespace-pre-line">
+                                {children}
+                              </p>  
+                            ),  
+                            h1: ({children}) => (  
+                              <h1 className="text-lg font-semibold mb-2">{children}</h1>  
+                            ),  
+                            h2: ({children}) => (  
+                              <h2 className="text-base font-medium mb-2">{children}</h2>  
+                            ),
+                            ul: ({children}) => (
+                              <ul className="list-disc pl-6 mb-2 space-y-1">{children}</ul>
+                            ),
+                            ol: ({children}) => (
+                              <ol className="list-decimal pl-6 mb-2 space-y-1">{children}</ol>
+                            ),
+                            li: ({children}) => (
+                              <li className="mb-1">{children}</li>
+                            ),
+                            br: () => <br />
+                          }}  
+                        >  
+                          {message.text}  
+                        </ReactMarkdown>  
+                      </div>
                     </div>  
                     {message.sender === 'user' && (  
                       <Avatar className="h-8 w-8 ml-2 mt-1">  
