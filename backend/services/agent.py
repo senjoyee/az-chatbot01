@@ -183,7 +183,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
         try:
             state.documents = retriever_tool.run({
                 "query": state.question,
-                "k": 50,
+                "k": 15,
                 "filters": filter_expression
             })
             
@@ -231,7 +231,7 @@ def rerank_documents(state: AgentState) -> AgentState:
 
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
-    TOP_K_DOCUMENTS = 40
+    TOP_K_DOCUMENTS = 15
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     
     # Check if this is a summary request

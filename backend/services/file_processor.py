@@ -90,7 +90,7 @@ class FileProcessor:
                         else:
                             supported_formats = ['.pdf', '.doc', '.docx', '.xlsx', '.xls', '.ppt', '.pptx']
                             raise ValueError(f"Unsupported file type: {file_extension}. Supported formats are: {', '.join(supported_formats)}")
-                        chunks = chunk_by_title(elements, max_characters=5000, new_after_n_chars=6000)
+                        chunks = chunk_by_title(elements, max_characters=20000, new_after_n_chars=21000)
                         logger.info(f"Created {len(chunks)} chunks from {file_name}")
                         full_document = " ".join([chunk.text for chunk in chunks if hasattr(chunk, 'text') and chunk.text.strip()])
                         logger.info(f"Generating contextualized chunks for {file_name}")
