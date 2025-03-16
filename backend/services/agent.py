@@ -474,7 +474,7 @@ def generate_summary(state: AgentState) -> AgentState:
             "question": x.question
         })
         | SUMMARY_PROMPT
-        | llm_o3_mini
+        | llm_4o_mini
         | StrOutputParser()
     )
     
