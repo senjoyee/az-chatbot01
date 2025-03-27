@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Upload, Trash2, File, Info, MessageSquare } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { uploadFiles, deleteFile, listFiles, getFileStatus } from './api'
+import { uploadFiles, deleteFile, listFiles, getFileStatus, toggleNativeAPI, getNativeAPIStatus } from './api'
 import { FileProcessingStatus, FileItem, FileWithCustomer } from './types'
 import { useFileStatusPolling } from './hooks/useFileStatusPolling'
 import { StatusIndicator } from './ui/status-indicator'
@@ -23,6 +23,7 @@ export default function DocumentUploadService() {
   const [loading, setLoading] = useState(true)
   const [filesToUpload, setFilesToUpload] = useState<FileWithCustomer[]>([])
   const [selectedFileDetails, setSelectedFileDetails] = useState<string | null>(null)
+  const [useNativeAPI, setUseNativeAPI] = useState(getNativeAPIStatus())
   
   // Pagination states
   const [currentPage, setCurrentPage] = useState(1)
@@ -37,6 +38,16 @@ export default function DocumentUploadService() {
   useEffect(() => {
     setSelectedFiles([]);
   }, [currentPage]);
+
+  useEffect(() => {
+    toggleNativeAPI(useNativeAPI);
+    // Show notification when API mode changes
+    if (useNativeAPI) {
+      toast.success("Switched to Native Azure AI Search SDK");
+    } else {
+      toast.info("Switched to Original Langchain Implementation");
+    }
+  }, [useNativeAPI]);
 
   const fetchFiles = async (page: number = 1, pageSize: number = 10) => {
     try {
@@ -257,10 +268,26 @@ export default function DocumentUploadService() {
             <CardTitle className="text-2xl">Document Upload Service</CardTitle>
             <CardDescription>Upload, manage, and delete your documents securely in Azure Blob Storage</CardDescription>
           </div>
-          <Link href="/" className="inline-flex items-center px-3 py-2 bg-gray-800 text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-700">
-            <MessageSquare className="h-4 w-4 mr-2" />
-            Go to Chatbot
-          </Link>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center">
+              <label className="relative inline-flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={useNativeAPI}
+                  onChange={() => setUseNativeAPI(!useNativeAPI)}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                <span className="ml-2 text-sm font-medium text-gray-700">
+                  {useNativeAPI ? 'Native API' : 'Original API'}
+                </span>
+              </label>
+            </div>
+            <Link href="/" className="inline-flex items-center px-3 py-2 bg-gray-800 text-white text-sm font-medium rounded-md shadow-sm hover:bg-gray-700">
+              <MessageSquare className="h-4 w-4 mr-2" />
+              Go to Chatbot
+            </Link>
+          </div>
         </CardHeader>
         <CardContent>
           {/* Dropzone */}

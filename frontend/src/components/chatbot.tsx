@@ -12,7 +12,7 @@ import { toast } from 'sonner'
 import Link from 'next/link'
 import ReactMarkdown from 'react-markdown'  
 import remarkGfm from 'remark-gfm'
-import { sendMessage } from "./api";  
+import { sendMessage, toggleNativeAPI, getNativeAPIStatus } from "./api";  
 
 interface Message {  
   id: number  
@@ -29,8 +29,20 @@ export default function Component() {
   const [error, setError] = useState<string | null>(null)
   const [selectedFiles, setSelectedFiles] = useState<string[]>([])
   const [sidebarVisible, setSidebarVisible] = useState(true)
+  const [useNativeAPI, setUseNativeAPI] = useState(false)
   const scrollAreaRef = useRef<HTMLDivElement>(null)  
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Effect to update API mode when toggle changes
+  useEffect(() => {
+    toggleNativeAPI(useNativeAPI);
+    // Show notification when API mode changes
+    if (useNativeAPI) {
+      toast.success("Switched to Native Azure AI Search SDK");
+    } else {
+      toast.info("Switched to Original Langchain Implementation");
+    }
+  }, [useNativeAPI]);
 
   useEffect(() => {  
     // Scroll to bottom whenever messages change
@@ -113,10 +125,26 @@ export default function Component() {
           <div className="bg-[#2F3336] p-4 flex flex-col">
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-white font-medium">Document Assistant</h2>
-              <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
-                <Upload className="h-4 w-4 mr-1.5" />
-                Upload Documents
-              </Link>
+              <div className="flex items-center gap-4">
+                <div className="flex items-center">
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={useNativeAPI}
+                      onChange={() => setUseNativeAPI(!useNativeAPI)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                    <span className="ml-2 text-sm font-medium text-white">
+                      {useNativeAPI ? 'Native API' : 'Original API'}
+                    </span>
+                  </label>
+                </div>
+                <Link href="/uploadservice" className="flex items-center px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors">
+                  <Upload className="h-4 w-4 mr-1.5" />
+                  Upload Documents
+                </Link>
+              </div>
             </div>
             <div className="text-gray-200">  
               {selectedFiles.length > 0 ? (
@@ -187,10 +215,10 @@ export default function Component() {
                           className="text-sm font-medium"
                           remarkPlugins={[remarkGfm]}
                           components={{  
-                            code: ({node, inline, className, children, ...props}) => (  
+                            code: ({node, className, children, ...props}) => (  
                               <code  
                                 className={`${
-                                  inline   
+                                  className?.includes('inline')   
                                     ? 'bg-gray-200 px-1 rounded'   
                                     : 'block bg-gray-800 text-white p-2 rounded font-mono'  
                                 } ${className}`}  

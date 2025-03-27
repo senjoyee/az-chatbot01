@@ -1,5 +1,20 @@
 import { FileProcessingStatus, FileItem, FileWithCustomer } from './types';
 
+// Flag to control whether to use native API endpoints
+let useNativeAPI = false;
+
+// Function to toggle between original and native API
+export const toggleNativeAPI = (value: boolean) => {
+  useNativeAPI = value;
+  console.log(`API mode set to: ${useNativeAPI ? 'Native' : 'Original'}`);
+  return useNativeAPI;
+};
+
+// Function to get current API mode
+export const getNativeAPIStatus = () => {
+  return useNativeAPI;
+};
+
 const API_BASE_URL = 'https://jscbbackend01.azurewebsites.net';
 
 // Error handling utility
@@ -33,7 +48,7 @@ export const uploadFiles = async (filesWithCustomers: FileWithCustomer[]) => {
   const formData = new FormData();
   
   // Create a mapping of filenames to customer names
-  const customerMap = {};
+  const customerMap: Record<string, string> = {};
   filesWithCustomers.forEach(({ file, customerName }) => {
     customerMap[file.name] = customerName;
   });
@@ -75,7 +90,10 @@ export const uploadFiles = async (filesWithCustomers: FileWithCustomer[]) => {
 export const deleteFile = async (filename: string) => {
   console.log('Attempting to delete file:', filename);
   try {
-    const response = await fetch(`${API_BASE_URL}/deletefile/${encodeURIComponent(filename)}`, {
+    // Determine which endpoint to use based on the toggle
+    const endpoint = useNativeAPI ? '/native/documents/' : '/deletefile/';
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}${encodeURIComponent(filename)}`, {
       method: 'DELETE',
       credentials: 'include',
       headers: {
@@ -178,7 +196,10 @@ export const sendMessage = async (
   selectedFiles: string[] = []
 ) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/conversation`, {
+    // Determine which endpoint to use based on the toggle
+    const endpoint = useNativeAPI ? '/native/conversation' : '/conversation';
+    
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       method: 'POST',
       credentials: 'include',
       headers: {
