@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 # Import utility functions and configuration
 from config.logging_config import setup_logging
-from routes import file_status, conversation, file_routes, document_routes
+from routes import file_status, conversation, file_routes, document_routes, native_routes
 
 
 logger = setup_logging()
@@ -28,3 +28,4 @@ app.include_router(file_status.router)
 app.include_router(conversation.router)
 app.include_router(file_routes.router)
 app.include_router(document_routes.router)
+app.include_router(native_routes.router)  # Add the native routes
