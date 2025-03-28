@@ -487,8 +487,8 @@ builder.add_node("process_for_summary", process_documents_for_summary)
 builder.add_node("generate_summary", generate_summary)
 
 # Add edges
-builder.add_edge("detect_summary", "summary", condition=lambda x: x == "summary")
-builder.add_edge("detect_summary", "condense", condition=lambda x: x == "condense")
+builder.add_edge("detect_summary", "summary", if_=lambda x: x == "summary")
+builder.add_edge("detect_summary", "condense", if_=lambda x: x == "condense")
 
 builder.add_edge("summary", "retrieve_for_summary")
 builder.add_edge("retrieve_for_summary", "process_for_summary")
@@ -498,8 +498,8 @@ builder.add_edge("generate_summary", "update_history")
 builder.add_edge("condense", "check_customer")
 builder.add_edge("check_customer", "detect_casual")
 
-builder.add_edge("detect_casual", "respond_casual", condition=lambda x: x == "casual")
-builder.add_edge("detect_casual", "retrieve", condition=lambda x: x == "retrieve")
+builder.add_edge("detect_casual", "respond_casual", if_=lambda x: x == "casual")
+builder.add_edge("detect_casual", "retrieve", if_=lambda x: x == "retrieve")
 
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
