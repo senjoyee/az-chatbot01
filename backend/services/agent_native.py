@@ -474,6 +474,7 @@ builder = StateGraph(AgentState)
 
 # Add nodes
 builder.add_node("detect_summary", detect_summary_intent)
+builder.add_node("summary", retrieve_documents_for_summary)  # Add missing "summary" node
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
 builder.add_node("detect_casual", detect_casual_talk)
@@ -482,7 +483,6 @@ builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
 builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("update_history", update_history)
-builder.add_node("retrieve_for_summary", retrieve_documents_for_summary)
 builder.add_node("process_for_summary", process_documents_for_summary)
 builder.add_node("generate_summary", generate_summary)
 
@@ -490,8 +490,7 @@ builder.add_node("generate_summary", generate_summary)
 builder.add_edge("detect_summary", "summary")
 builder.add_edge("detect_summary", "condense")
 
-builder.add_edge("summary", "retrieve_for_summary")
-builder.add_edge("retrieve_for_summary", "process_for_summary")
+builder.add_edge("summary", "process_for_summary")
 builder.add_edge("process_for_summary", "generate_summary")
 builder.add_edge("generate_summary", "update_history")
 
