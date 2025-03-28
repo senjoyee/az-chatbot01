@@ -552,6 +552,6 @@ async def run_agent_native(question: str, chat_history: List[Message], selected_
     
     # Return the result
     return {
-        "response": result.response,
-        "chat_history": result.chat_history
+        "response": result["response"],
+        "chat_history": result["chat_history"]
     }
