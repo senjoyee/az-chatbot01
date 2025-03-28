@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 
 from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableLambda
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
@@ -487,6 +487,7 @@ builder.add_node("process_for_summary", process_documents_for_summary)
 builder.add_node("generate_summary", generate_summary)
 
 # Add edges
+builder.add_edge(START, "detect_summary")
 builder.add_edge("detect_summary", "summary")
 builder.add_edge("detect_summary", "condense")
 
