@@ -286,7 +286,7 @@ def update_history(state: AgentState) -> AgentState:
     
     # Add the user's question to the history
     state.chat_history.append(
-        Message(role="user", content=state.original_question)
+        Message(role="user", content=state.question)
     )
     
     # Add the assistant's response to the history
@@ -320,7 +320,7 @@ def respond_to_casual(state: AgentState) -> AgentState:
     _input = (
         RunnableLambda(lambda x: {
             "chat_history": format_chat_history(x.chat_history),
-            "question": x.original_question
+            "question": x.question
         })
         | CONVERSATION_PROMPT
         | llm_o3_mini
@@ -536,7 +536,6 @@ async def run_agent_native(question: str, chat_history: List[Message], selected_
     
     # Initialize the agent state
     state = AgentState(
-        original_question=question,
         question=question,
         chat_history=chat_history.copy() if chat_history else [],
         selected_files=selected_files or [],
