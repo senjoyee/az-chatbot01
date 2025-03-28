@@ -301,9 +301,9 @@ def detect_summary_intent(state: AgentState) -> AgentState:
     Detect if the user is requesting a document summary.
     This is placed early in the workflow to enable proper routing.
     """
-    if is_summary_request(state.question):
+    state.is_summary_request = is_summary_request(state.question)
+    if state.is_summary_request:
         logger.info("Summary request detected")
-        state.is_summary_request = True
     return state
 
 def detect_casual_talk(state: AgentState) -> AgentState:
@@ -472,45 +472,49 @@ def generate_summary(state: AgentState) -> AgentState:
     
     return state
 
-# Build the Langgraph
+# Build the Langgraph following the original agent.py pattern
 builder = StateGraph(AgentState)
 
 # Add nodes
 builder.add_node("detect_summary", detect_summary_intent)
-builder.add_node("summary", retrieve_documents_for_summary)  # Add missing "summary" node
+builder.add_node("detect_casual", detect_casual_talk)
+builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
-builder.add_node("detect_casual", detect_casual_talk)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
-builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("update_history", update_history)
+builder.add_node("retrieve_for_summary", retrieve_documents_for_summary)
 builder.add_node("process_for_summary", process_documents_for_summary)
 builder.add_node("generate_summary", generate_summary)
 
-# Add edges
+# Add edge from START to first node
 builder.add_edge(START, "detect_summary")
 
-# Conditional routing based on state properties
-builder.add_edge("detect_summary", "summary", lambda state: state.is_summary_request)
-builder.add_edge("detect_summary", "condense", lambda state: not state.is_summary_request)
-
-builder.add_edge("summary", "process_for_summary")
-builder.add_edge("process_for_summary", "generate_summary")
-builder.add_edge("generate_summary", "update_history")
-
+# Follow the original working pattern for conditional edges
+builder.add_conditional_edges(
+    "detect_summary",
+    lambda s: "detect_casual" if not s.is_summary_request else "condense"
+)
+builder.add_conditional_edges(
+    "detect_casual",
+    lambda s: "respond_casual" if s.needs_casual_response else "condense"
+)
+builder.add_edge("respond_casual", "update_history")
 builder.add_edge("condense", "check_customer")
-builder.add_edge("check_customer", "detect_casual")
-
-builder.add_edge("detect_casual", "respond_casual", lambda state: state.needs_casual_response)
-builder.add_edge("detect_casual", "retrieve", lambda state: not state.needs_casual_response)
-
+builder.add_conditional_edges(
+    "check_customer",
+    lambda s: "update_history" if s.should_stop else (
+        "retrieve_for_summary" if s.is_summary_request else "retrieve"
+    )
+)
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
-builder.add_edge("respond_casual", "update_history")
-
+builder.add_edge("retrieve_for_summary", "process_for_summary")
+builder.add_edge("process_for_summary", "generate_summary")
+builder.add_edge("generate_summary", "update_history")
 builder.add_edge("update_history", END)
 
 # Compile the graph
