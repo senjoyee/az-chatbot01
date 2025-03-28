@@ -296,19 +296,22 @@ def update_history(state: AgentState) -> AgentState:
     
     return state
 
-def detect_casual_talk(state: AgentState) -> str:
-    """Detect if the question is casual conversation."""
-    return "casual" if is_casual_conversation(state.question) else "retrieve"
-
-def detect_summary_intent(state: AgentState) -> str:
+def detect_summary_intent(state: AgentState) -> AgentState:
     """
     Detect if the user is requesting a document summary.
     This is placed early in the workflow to enable proper routing.
     """
     if is_summary_request(state.question):
         logger.info("Summary request detected")
-        return "summary"
-    return "condense"
+        state.is_summary_request = True
+    return state
+
+def detect_casual_talk(state: AgentState) -> AgentState:
+    """
+    Detect if the question is casual conversation.
+    """
+    state.needs_casual_response = is_casual_conversation(state.question)
+    return state
 
 def respond_to_casual(state: AgentState) -> AgentState:
     """Generate a response for casual conversation."""
@@ -488,8 +491,10 @@ builder.add_node("generate_summary", generate_summary)
 
 # Add edges
 builder.add_edge(START, "detect_summary")
-builder.add_edge("detect_summary", "summary")
-builder.add_edge("detect_summary", "condense")
+
+# Conditional routing based on state properties
+builder.add_edge("detect_summary", "summary", lambda state: state.is_summary_request)
+builder.add_edge("detect_summary", "condense", lambda state: not state.is_summary_request)
 
 builder.add_edge("summary", "process_for_summary")
 builder.add_edge("process_for_summary", "generate_summary")
@@ -498,8 +503,8 @@ builder.add_edge("generate_summary", "update_history")
 builder.add_edge("condense", "check_customer")
 builder.add_edge("check_customer", "detect_casual")
 
-builder.add_edge("detect_casual", "respond_casual")
-builder.add_edge("detect_casual", "retrieve")
+builder.add_edge("detect_casual", "respond_casual", lambda state: state.needs_casual_response)
+builder.add_edge("detect_casual", "retrieve", lambda state: not state.needs_casual_response)
 
 builder.add_edge("retrieve", "rerank")
 builder.add_edge("rerank", "generate")
@@ -534,7 +539,9 @@ async def run_agent_native(question: str, chat_history: List[Message], selected_
         documents=[],
         response="",
         should_stop=False,
-        customers=[]
+        customers=[],
+        is_summary_request=False,
+        needs_casual_response=False
     )
     
     # Run the graph
