@@ -518,7 +518,10 @@ builder.add_edge("generate", "update_history")
 builder.add_edge("retrieve_for_summary", "process_for_summary")
 builder.add_edge("process_for_summary", "generate_summary")
 builder.add_edge("generate_summary", "update_history")
-builder.add_edge("update_history", END)
+builder.add_conditional_edges(
+    "update_history",
+    lambda s: END if s.should_stop else "detect_summary"
+)
 
 # Compile the graph
 graph = builder.compile()
@@ -551,10 +554,19 @@ async def run_agent_native(question: str, chat_history: List[Message], selected_
     )
     
     # Run the graph
-    result = await graph.ainvoke(state)
-    
-    # Return the result
-    return {
-        "response": result["response"],
-        "chat_history": result["chat_history"]
-    }
+    try:
+        result = await graph.ainvoke(state)
+        logger.info(f"Graph execution completed with result keys: {result.keys()}")
+        
+        # Return the result
+        return {
+            "response": result["response"],
+            "chat_history": result["chat_history"]
+        }
+    except Exception as e:
+        logger.error(f"Error during graph execution: {str(e)}")
+        # Fallback response in case of graph execution error
+        return {
+            "response": "An error occurred while processing your request. Please try again.",
+            "chat_history": chat_history
+        }
