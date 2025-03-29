@@ -264,7 +264,7 @@ def generate_response(state: AgentState) -> AgentState:
     _input = (
         RunnableLambda(lambda x: {
             "question": x.question,
-            "documents": documents_str
+            "context": documents_str
         })
         | ANSWER_PROMPT
         | llm_4o_mini
@@ -277,6 +277,7 @@ def generate_response(state: AgentState) -> AgentState:
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         state.response = "I encountered an error while generating a response. Please try again or rephrase your question."
+        state.should_stop = True  # Set should_stop to True on error to prevent recursion
     
     return state
 
@@ -524,7 +525,7 @@ builder.add_conditional_edges(
 )
 
 # Compile the graph
-graph = builder.compile()
+graph = builder.compile(recursion_limit=10)  # Lower recursion limit to catch issues earlier
 
 async def run_agent_native(question: str, chat_history: List[Message], selected_files: List[str] = None):
     """
