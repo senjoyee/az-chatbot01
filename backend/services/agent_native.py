@@ -525,7 +525,7 @@ builder.add_conditional_edges(
 )
 
 # Compile the graph
-graph = builder.compile(recursion_limit=10)  # Lower recursion limit to catch issues earlier
+graph = builder.compile()
 
 async def run_agent_native(question: str, chat_history: List[Message], selected_files: List[str] = None):
     """
