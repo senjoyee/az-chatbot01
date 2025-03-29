@@ -277,7 +277,7 @@ def generate_response(state: AgentState) -> AgentState:
     except Exception as e:
         logger.error(f"Error generating response: {str(e)}")
         state.response = "I encountered an error while generating a response. Please try again or rephrase your question."
-        state.should_stop = True  # Set should_stop to True on error to prevent recursion
+        state.should_stop = True  # Keep this to handle errors properly
     
     return state
 
@@ -294,6 +294,9 @@ def update_history(state: AgentState) -> AgentState:
     state.chat_history.append(
         Message(role="assistant", content=state.response)
     )
+    
+    # Set should_stop to true to end the conversation turn
+    state.should_stop = True
     
     return state
 
@@ -470,6 +473,7 @@ def generate_summary(state: AgentState) -> AgentState:
     except Exception as e:
         logger.error(f"Error generating summary: {str(e)}")
         state.response = "I encountered an error while generating the document summary. The document might be too large or complex to summarize effectively."
+        state.should_stop = True  # Keep this to handle errors properly
     
     return state
 
