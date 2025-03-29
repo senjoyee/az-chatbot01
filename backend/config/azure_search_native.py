@@ -247,7 +247,7 @@ class AzureSearchClient:
             query_vector = self.embedding_service.embed_query(query)
             
             # Set up search options
-            vector_queries = [{"vector": query_vector, "k": k, "fields": "content_vector"}]
+            vector_queries = [{"vector": query_vector, "k": k, "fields": "content_vector", "kind": "vector"}]
             
             # Perform the search
             results = self.search_client.search(
