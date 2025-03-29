@@ -509,7 +509,10 @@ builder.add_conditional_edges(
         "retrieve_for_summary" if s.is_summary_request else "retrieve"
     )
 )
-builder.add_edge("retrieve", "rerank")
+builder.add_conditional_edges(
+    "retrieve",
+    lambda s: "update_history" if s.should_stop else "rerank"
+)
 builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
 builder.add_edge("retrieve_for_summary", "process_for_summary")
