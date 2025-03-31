@@ -212,23 +212,6 @@ def retrieve_documents(state: AgentState) -> AgentState:
         return state
     return state
 
-def rerank_documents(state: AgentState) -> AgentState:
-    logger.info("Reranking documents")
-    documents = state.documents
-    if not documents:
-        logger.info("No documents to rerank, skipping reranking step")
-        return state
-    
-    # The documents are already ranked by Azure AI Search's semantic ranking
-    # We can skip the local reranking step
-    logger.info("Documents already ranked by Azure AI Search semantic ranking")
-    logger.info(f"Using {len(documents)} documents")
-    
-    # If you want to apply additional custom ranking logic, you can do it here
-    # For now, we'll just return the documents in the order provided by Azure AI Search
-    
-    return state
-
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
     TOP_K_DOCUMENTS = 15
@@ -498,7 +481,6 @@ builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
 builder.add_node("retrieve", retrieve_documents)
-builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
 builder.add_node("update_history", update_history)
 builder.add_node("retrieve_for_summary", retrieve_documents_for_summary)
@@ -523,9 +505,8 @@ builder.add_conditional_edges(
 )
 builder.add_conditional_edges(
     "retrieve",
-    lambda s: "update_history" if s.should_stop else "rerank"
+    lambda s: "update_history" if s.should_stop else "generate"
 )
-builder.add_edge("rerank", "generate")
 builder.add_edge("generate", "update_history")
 builder.add_conditional_edges(
     "retrieve_for_summary",
