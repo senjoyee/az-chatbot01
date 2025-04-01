@@ -4,10 +4,7 @@ on:
   push:
     branches:
       - main
-      - selective-search
-      - code-module
-      - semantic-ranking
-      - summarizer
+      - agentic-rag
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'

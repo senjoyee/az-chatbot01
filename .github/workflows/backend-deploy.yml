@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - voice-chat
+      - agentic-rag
     paths:
       - 'backend/**'
       - '.github/workflows/backend-deploy.yml'
