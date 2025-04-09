@@ -15,8 +15,6 @@ from utils.helpers import is_casual_conversation
 from config.settings import (
     AZURE_OPENAI_API_KEY,
     AZURE_OPENAI_ENDPOINT,
-    AZURE_OPENAI_API_KEY_SC,
-    AZURE_OPENAI_ENDPOINT_SC,
 )
 
 from config.prompts import (
@@ -47,8 +45,8 @@ llm_4o_mini = AzureChatOpenAI(
 llm_o3_mini = AzureChatOpenAI(
     azure_deployment="o3-mini",
     openai_api_version="2024-12-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,    
-    api_key=AZURE_OPENAI_API_KEY_SC,
+    azure_endpoint=AZURE_OPENAI_ENDPOINT,    
+    api_key=AZURE_OPENAI_API_KEY,
     reasoning_effort="low"
 )
 
