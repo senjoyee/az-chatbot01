@@ -4,10 +4,6 @@ on:
   push:
     branches:
       - main
-      - selective-search
-      - code-module
-      - semantic-ranking
-      - summarizer
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'
