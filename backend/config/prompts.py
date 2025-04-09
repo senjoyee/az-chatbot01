@@ -4,11 +4,28 @@ Prompt templates for the chatbot application.
 from langchain.prompts import PromptTemplate
 
 # Prompt for condensing a follow-up question with chat history into a standalone question
-CONDENSE_QUESTION_TEMPLATE = """Given the following conversation and a follow up question, rephrase the follow up question to be a standalone question, in its original language.
+CONDENSE_QUESTION_TEMPLATE = """Given this conversation history and follow-up question, rephrase the follow-up to be a clear, standalone question that maintains all contextual references. Follow these guidelines:
+
+1. PRESERVE REFERENCES: Keep all pronouns and references ("that", "it", "they") that point to previous messages
+2. CLARIFY AMBIGUITY: If the follow-up is vague, incorporate relevant context from history
+3. MAINTAIN INTENT: Don't change the core intent or subject of the original follow-up
+4. BE CONCISE: Remove unnecessary words but keep all key context
+
+Examples:
+Bad: "What about their policy?"
+Good: "What is Microsoft's policy on remote work?"
+
+Bad: "When was it founded?" 
+Good: "When was OpenAI founded?"
+
 Chat History:
 {chat_history}
-Follow Up Input: {question}
-Standalone question:"""
+
+Follow-Up Input: {question}
+
+Analyze the history, then write the improved standalone question:
+
+Standalone Question:"""
 
 # Prompt for generating an answer based on retrieved documents
 ANSWER_TEMPLATE = """
