@@ -15,6 +15,8 @@ from utils.helpers import is_casual_conversation
 from config.settings import (
     AZURE_OPENAI_API_KEY,
     AZURE_OPENAI_ENDPOINT,
+    AZURE_OPENAI_API_KEY_SC,
+    AZURE_OPENAI_ENDPOINT_SC
 )
 
 from config.prompts import (
@@ -48,6 +50,14 @@ llm_o3_mini = AzureChatOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,    
     api_key=AZURE_OPENAI_API_KEY,
     reasoning_effort="low"
+)
+
+llm_41_mini = AzureChatOpenAI(
+    azure_deployment="gpt-4.1-mini",
+    openai_api_version="2024-12-01-preview",
+    azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,    
+    api_key=AZURE_OPENAI_API_KEY_SC,
+    temperature=0.3
 )
 
 def format_chat_history(chat_history: List[Message]) -> str:
@@ -97,7 +107,7 @@ def condense_question(state: AgentState) -> AgentState:
             "question": x.question
         })
         | CONDENSE_QUESTION_PROMPT
-        | llm_4o_mini
+        | llm_41_mini
         | StrOutputParser()
     )
     result = _input.invoke(state)
@@ -263,7 +273,7 @@ def generate_response(state: AgentState) -> AgentState:
                 "question": x.question
             })
             | SUMMARY_PROMPT  # Use the specialized summary prompt
-            | llm_o3_mini
+            | llm_41_mini
             | StrOutputParser()
         )
     else:
@@ -273,7 +283,7 @@ def generate_response(state: AgentState) -> AgentState:
                 "question": x.question
             })
             | ANSWER_PROMPT
-            | llm_o3_mini
+            | llm_41_mini
             | StrOutputParser()
         )
     
@@ -300,7 +310,7 @@ def update_history(state: AgentState) -> AgentState:
     return state
 
 def detect_casual_talk(state: AgentState) -> AgentState:
-    state.needs_casual_response = is_casual_conversation(state.question, llm_4o_mini)
+    state.needs_casual_response = is_casual_conversation(state.question, llm_41_mini)
     return state
 
 def detect_summary_intent(state: AgentState) -> AgentState:
@@ -313,7 +323,7 @@ def detect_summary_intent(state: AgentState) -> AgentState:
     return state
 
 def respond_to_casual(state: AgentState) -> AgentState:
-    state.response = llm_4o_mini.invoke(
+    state.response = llm_41_mini.invoke(
         CONVERSATION_PROMPT.format(
             message=state.question,
             history=format_chat_history(state.chat_history)
@@ -472,7 +482,7 @@ def generate_summary(state: AgentState) -> AgentState:
             "question": x.question
         })
         | SUMMARY_PROMPT
-        | llm_o3_mini
+        | llm_41_mini
         | StrOutputParser()
     )
     
