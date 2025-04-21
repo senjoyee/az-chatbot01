@@ -43,5 +43,7 @@ jobs:
           tags: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
           build-args: |
             BUILDKIT_INLINE_CACHE=1
-          # Use the current image as a cache source for subsequent builds
-          cache-from: type=registry,ref=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          # --- ONE-TIME: Disable build cache for clean build ---
+          no-cache: true
+          # cache-from: type=registry,ref=${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+          # --- END ONE-TIME CHANGE ---
