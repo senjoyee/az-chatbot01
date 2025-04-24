@@ -23,7 +23,6 @@ from config.prompts import (
     CONDENSE_QUESTION_PROMPT,
     ANSWER_PROMPT,
     CONVERSATION_PROMPT,
-    DECISION_PROMPT,
     SUMMARY_PROMPT
 )
 

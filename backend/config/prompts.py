@@ -4,6 +4,9 @@ Prompt templates for the chatbot application.
 from langchain.prompts import PromptTemplate
 
 # Prompt for condensing a follow-up question with chat history into a standalone question
+# =========================================================
+# 1️⃣  CONDENSE QUESTION TEMPLATE  –  Question‑Condensation
+# =========================================================
 CONDENSE_QUESTION_TEMPLATE = """Given this conversation history and follow-up question, rephrase the follow-up to be a clear, standalone question that maintains all contextual references. Follow these guidelines:
 
 1. PRESERVE REFERENCES: Keep all pronouns and references ("that", "it", "they") that point to previous messages
@@ -29,7 +32,7 @@ Standalone Question:"""
 
 # Prompt for generating an answer based on retrieved documents
 # =========================================================
-# 1️⃣  ANSWER TEMPLATE  –  Retrieval‑based Question‑Answering
+#  2️⃣  ANSWER TEMPLATE  –  Retrieval‑based Question‑Answering
 # =========================================================
 ANSWER_TEMPLATE = """
 <system>
@@ -92,7 +95,21 @@ ANSWER_TEMPLATE = """
 <answer>
 """
 # =========================================================
-# 2️⃣  SUMMARY TEMPLATE  –  Multi‑Document Summarization
+# 3️⃣  CONVERSATION TEMPLATE  –  Casual Conversation
+# =========================================================
+CONVERSATION_TEMPLATE = """You are a friendly and helpful AI assistant. Respond to the following message in a natural, conversational way.
+If there is chat history, maintain a consistent and contextual conversation.
+
+Chat History:
+{history}
+
+User Message:
+{message}
+
+Your response should be brief and friendly."""
+
+# =========================================================
+# 4️⃣  SUMMARY TEMPLATE  –  Multi‑Document Summarization
 # =========================================================
 SUMMARY_TEMPLATE = """
 <system>
@@ -139,5 +156,4 @@ SUMMARY_TEMPLATE = """
 CONDENSE_QUESTION_PROMPT = PromptTemplate.from_template(CONDENSE_QUESTION_TEMPLATE)
 ANSWER_PROMPT = PromptTemplate.from_template(ANSWER_TEMPLATE)
 CONVERSATION_PROMPT = PromptTemplate.from_template(CONVERSATION_TEMPLATE)
-DECISION_PROMPT = PromptTemplate.from_template(DECISION_TEMPLATE)
 SUMMARY_PROMPT = PromptTemplate.from_template(SUMMARY_TEMPLATE)
