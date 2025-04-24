@@ -31,11 +31,17 @@ export default function Component() {
   const [sidebarVisible, setSidebarVisible] = useState(true)
   const scrollAreaRef = useRef<HTMLDivElement>(null)  
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const lastUserMessageRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {  
-    // Scroll to bottom whenever messages change
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    // Scroll to position the last user message at the top with the AI response below
+    if (messages.length > 1 && lastUserMessageRef.current) {
+      // If the last message is from the assistant and there's a preceding user message
+      const lastMessage = messages[messages.length - 1];
+      if (lastMessage.sender === 'assistant') {
+        // Scroll to position the user's question at the top
+        lastUserMessageRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
   }, [messages])  
 
@@ -152,6 +158,7 @@ export default function Component() {
                 {messages.map((message) => (  
                   <div  
                     key={message.id}  
+                    ref={message.sender === 'user' ? (el) => { lastUserMessageRef.current = el } : undefined}
                     className={`mb-6 flex ${  
                       message.sender === 'user' ? 'justify-end' : 'justify-start'  
                     }`}  
