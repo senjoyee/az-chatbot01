@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class RetrieverInput(BaseModel):
     """Input for the retriever tool."""
     query: str = Field(..., description="The query to search for")
-    k: int = Field(default=10, description="Number of documents to retrieve")
+    k: int = Field(default=25, description="Number of documents to retrieve")
     filters: Optional[str] = Field(default=None, description="Optional filter expression to apply")
 
 class RetrieverTool(BaseTool):
