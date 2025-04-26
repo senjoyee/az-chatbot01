@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends
-from typing import List
+from fastapi import APIRouter, Depends, Path
+from typing import List, Dict
 
 from models.schemas import BlobEvent, DocumentIn
 from controllers.document_controller import DocumentController
@@ -19,3 +19,10 @@ async def index_documents(documents_in: List[DocumentIn], controller: DocumentCo
     Index documents in the vector store.
     """
     return await controller.index_documents(documents_in)
+
+@router.get("/summarize/{filename}")
+async def summarize_document(filename: str = Path(..., description="The filename to summarize"), controller: DocumentController = Depends()):
+    """
+    Generate a summary for the specified document.
+    """
+    return await controller.summarize_document(filename)

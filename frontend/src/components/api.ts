@@ -227,3 +227,24 @@ export const getFileStatus = async (filename: string): Promise<{ status: FilePro
 };
 
 // The getFilesStatus function is no longer needed as we're using listFiles for polling
+
+export const summarizeDocument = async (filename: string): Promise<{summary: string}> => {
+  try {
+    console.log('Requesting summary for:', filename);
+    const response = await fetch(`${API_BASE_URL}/summarize/${encodeURIComponent(filename)}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Summary request failed:', response.status, errorText);
+      throw new Error(`Failed to get summary: ${response.status} ${errorText}`);
+    }
+    
+    return response.json();
+  } catch (error) {
+    handleApiError(error, 'document summarization');
+    throw error;
+  }
+};

@@ -1,11 +1,12 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { listFiles } from '../api'
+import { listFiles, summarizeDocument } from '../api'
 import { FileItem, FileProcessingStatus } from '../types'
 import { Button } from './button'
 import { ScrollArea } from './scroll-area'
-import { RefreshCw, FileIcon, CheckCircle, ChevronRight } from 'lucide-react'
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './dialog'
+import { RefreshCw, FileIcon, CheckCircle, ChevronRight, FileText } from 'lucide-react'
 
 interface FileSidebarProps {
   onFileSelectionChange?: (selectedFiles: string[]) => void
@@ -17,6 +18,10 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
+  const [summaryOpen, setSummaryOpen] = useState(false)
+  const [summarizing, setSummarizing] = useState(false)
+  const [summaryContent, setSummaryContent] = useState<string>('')
+  const [summaryFileName, setSummaryFileName] = useState<string>('')
 
   // Only show completed files
   const indexedFiles = files.filter(file => file.status === FileProcessingStatus.COMPLETED)
@@ -114,8 +119,51 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
     )
   }
 
+  // Handle document summarization
+  const handleSummarize = async (fileId: string) => {
+    try {
+      // Don't allow summarization if already summarizing
+      if (summarizing) return;
+      
+      setSummarizing(true);
+      setSummaryFileName(fileId);
+      setSummaryContent('');
+      setSummaryOpen(true);
+      
+      const result = await summarizeDocument(fileId);
+      setSummaryContent(result.summary);
+    } catch (error) {
+      console.error('Error summarizing document:', error);
+      setSummaryContent('Error retrieving document summary. Please try again later.');
+    } finally {
+      setSummarizing(false);
+    }
+  };
+
   return (
     <ScrollArea className="h-full flex flex-col w-full font-sans">
+      <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Document Summary</DialogTitle>
+            <DialogDescription className="text-sm text-gray-500">
+              {summaryFileName}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            {summarizing ? (
+              <div className="flex flex-col items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-700 mb-4"></div>
+                <p className="text-gray-600">Generating summary...</p>
+              </div>
+            ) : (
+              <div className="whitespace-pre-line">
+                {summaryContent}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
@@ -178,25 +226,41 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                     ? 'bg-blue-100 text-blue-800'
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
-                onClick={() => handleFileSelection(file.id)}
               >
-                <div className="flex-shrink-0 mr-2">
-                  <FileIcon className="h-5 w-5 text-gray-500" />
+                <div 
+                  className="flex items-center flex-1"
+                  onClick={() => handleFileSelection(file.id)}
+                >
+                  <div className="flex-shrink-0 mr-2">
+                    <FileIcon className="h-5 w-5 text-gray-500" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">
+                      {file.name}
+                    </p>
+                  </div>
+                  <div className="ml-2">
+                    <CheckCircle
+                      className={`h-4 w-4 ${
+                        selectedFiles.includes(file.id)
+                          ? 'text-blue-600'
+                          : 'text-gray-300'
+                      }`}
+                    />
+                  </div>
                 </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {file.name}
-                  </p>
-                </div>
-                <div className="ml-2">
-                  <CheckCircle
-                    className={`h-4 w-4 ${
-                      selectedFiles.includes(file.id)
-                        ? 'text-blue-600'
-                        : 'text-gray-300'
-                    }`}
-                  />
-                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="ml-2 p-1 h-7 w-7"
+                  title="Summarize document"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleSummarize(file.id);
+                  }}
+                >
+                  <FileText className="h-4 w-4 text-gray-500" />
+                </Button>
               </div>
             ))}
           </div>
