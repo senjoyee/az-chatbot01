@@ -178,12 +178,12 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   return (
     <ScrollArea className="h-full flex flex-col w-full font-sans">
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
-        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto font-noto-sans">
           <DialogHeader>
             <div className="flex items-center justify-between">
-              <div>
-                <DialogTitle>Document Summary</DialogTitle>
-                <DialogDescription className="text-sm text-gray-500">
+              <div className="font-noto-sans">
+                <DialogTitle className="font-noto-sans">Document Summary</DialogTitle>
+                <DialogDescription className="text-sm text-gray-500 font-noto-sans">
                   {summaryFileName}
                 </DialogDescription>
               </div>
