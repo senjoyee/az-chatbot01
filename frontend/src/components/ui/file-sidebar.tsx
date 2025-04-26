@@ -6,10 +6,45 @@ import { FileItem, FileProcessingStatus } from '../types'
 import { Button } from './button'
 import { ScrollArea } from './scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './dialog'
-import { RefreshCw, FileIcon, CheckCircle, ChevronRight, FileText } from 'lucide-react'
+import { RefreshCw, FileIcon, CheckCircle, ChevronRight, FileText, Copy, Check } from 'lucide-react'
+import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
+import { copyToClipboard } from '../../utils/copy-utils'
+import { toast } from 'sonner'
 
 interface FileSidebarProps {
   onFileSelectionChange?: (selectedFiles: string[]) => void
+}
+
+interface CopyButtonProps {
+  text: string
+}
+
+function CopyButton({ text }: CopyButtonProps) {
+  const [copied, setCopied] = useState(false)
+
+  const handleCopy = async () => {
+    try {
+      await copyToClipboard(text, true) // true to remove markdown formatting
+      setCopied(true)
+      toast.success('Copied to clipboard')
+      setTimeout(() => setCopied(false), 2000)
+    } catch (error) {
+      toast.error('Failed to copy')
+    }
+  }
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      className="h-8 w-8 p-0 text-gray-500 hover:text-gray-700"
+      onClick={handleCopy}
+      title="Copy to clipboard"
+    >
+      {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+    </Button>
+  )
 }
 
 export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
@@ -145,10 +180,17 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
       <Dialog open={summaryOpen} onOpenChange={setSummaryOpen}>
         <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Document Summary</DialogTitle>
-            <DialogDescription className="text-sm text-gray-500">
-              {summaryFileName}
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <DialogTitle>Document Summary</DialogTitle>
+                <DialogDescription className="text-sm text-gray-500">
+                  {summaryFileName}
+                </DialogDescription>
+              </div>
+              {!summarizing && summaryContent && (
+                <CopyButton text={summaryContent} />
+              )}
+            </div>
           </DialogHeader>
           <div className="py-4">
             {summarizing ? (
@@ -157,8 +199,10 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                 <p className="text-gray-600">Generating summary...</p>
               </div>
             ) : (
-              <div className="whitespace-pre-line">
-                {summaryContent}
+              <div className="markdown-content font-noto-sans text-gray-900">
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                  {summaryContent}
+                </ReactMarkdown>
               </div>
             )}
           </div>

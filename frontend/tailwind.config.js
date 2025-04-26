@@ -21,6 +21,7 @@ module.exports = {
       fontFamily: {
         sans: ["var(--font-noto-sans)", "var(--font-work-sans)", ...fontFamily.sans],
         mono: ["var(--font-geist-mono)", ...fontFamily.mono],
+        "noto-sans": ["'Noto Sans'", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
