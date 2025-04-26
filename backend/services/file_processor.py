@@ -13,7 +13,7 @@ from unstructured.chunking.title import chunk_by_title
 from fastapi import HTTPException
 
 from config.logging_config import setup_logging
-from config.settings import BLOB_CONN_STRING, BLOB_CONTAINER, USE_WHOLE_DOCUMENTS
+from config.settings import BLOB_CONN_STRING, BLOB_CONTAINER
 from config.azure_search import search_client, embeddings
 from models.enums import ProcessingStatus
 from models.schemas import DocumentIn, BlobEvent
@@ -90,57 +90,49 @@ class FileProcessor:
                         else:
                             supported_formats = ['.pdf', '.doc', '.docx', '.xlsx', '.xls', '.ppt', '.pptx']
                             raise ValueError(f"Unsupported file type: {file_extension}. Supported formats are: {', '.join(supported_formats)}")
-                        if USE_WHOLE_DOCUMENTS:
-                            full_text = " ".join([elem.text for elem in elements if hasattr(elem, 'text') and elem.text.strip()])
-                            logger.info(f"Loaded whole document for {file_name}")
-                            metadata = {
-                                "source": file_name,
-                                "customer": customer_name,
-                                "file_type": file_extension.lstrip('.')
-                            }
-                            doc = DocumentIn(
-                                page_content=full_text,
-                                metadata={**serialize_metadata(metadata),
-                                          "last_update": datetime.utcnow().isoformat() + "Z",
-                                          "id": sanitize_id(file_name)}
-                            )
-                            documents = [doc]
-                            logger.info(f"Starting indexing for full document from {file_name}")
-                            await self.document_service.index_documents(documents)
-                        else:
-                            chunks = chunk_by_title(elements, max_characters=20000, new_after_n_chars=21000)
-                            logger.info(f"Created {len(chunks)} chunks from {file_name}")
-                            full_document = " ".join([chunk.text for chunk in chunks if hasattr(chunk, 'text') and chunk.text.strip()])
-                            logger.info(f"Generating contextualized chunks for {file_name}")
-                            contextualized_chunks = await self.contextualizer.contextualize_chunks(full_document, [chunk.text for chunk in chunks])
-                            logger.info(f"Created {len(contextualized_chunks)} contextualized chunks for {file_name}")
-                            documents = []
-                            base_id = sanitize_id(file_name)
-                            logger.info(f"Converting contextualized chunks to documents for {file_name}")
-                            for i, chunk in enumerate(contextualized_chunks):
-                                if chunk.strip():
-                                    metadata = {
-                                        "source": file_name,
-                                        "chunk_number": i + 1,
-                                        "customer": customer_name,
-                                        "file_type": file_extension.lstrip('.')
-                                    }
-                                    if file_extension in ['.xlsx', '.xls'] and i < len(chunks) and hasattr(chunks[i], 'excel_html'):
-                                        metadata["content_type"] = "table"
-                                        metadata["has_table_html"] = True
-                                        if hasattr(chunks[i], 'metadata') and hasattr(chunks[i].metadata, 'sheet_name'):
-                                            metadata["sheet_name"] = chunks[i].metadata.sheet_name
-                                    logger.info(f"Creating document for chunk {i+1} with metadata: {metadata}")
-                                    doc = DocumentIn(
-                                        page_content=chunk,
-                                        metadata={**serialize_metadata(metadata),
-                                                  "last_update": datetime.utcnow().isoformat() + "Z",
-                                                  "id": f"{base_id}_{i:04d}"}
-                                    )
-                                    documents.append(doc)
-                            logger.info(f"Created {len(documents)} documents from contextualized chunks for {file_name}")
-                            logger.info(f"Starting indexing for {len(documents)} contextualized documents from {file_name}")
-                            await self.document_service.index_documents(documents)
+                        chunks = chunk_by_title(elements, max_characters=20000, new_after_n_chars=21000)
+                        logger.info(f"Created {len(chunks)} chunks from {file_name}")
+                        full_document = " ".join([chunk.text for chunk in chunks if hasattr(chunk, 'text') and chunk.text.strip()])
+                        logger.info(f"Generating contextualized chunks for {file_name}")
+                        contextualized_chunks = await self.contextualizer.contextualize_chunks(full_document, [chunk.text for chunk in chunks])
+                        logger.info(f"Created {len(contextualized_chunks)} contextualized chunks for {file_name}")
+                        documents = []
+                        base_id = sanitize_id(file_name)
+                        logger.info(f"Converting contextualized chunks to documents for {file_name}")
+                        for i, chunk in enumerate(contextualized_chunks):
+                            if chunk.strip():
+                                metadata = {
+                                    "source": file_name,
+                                    "chunk_number": i + 1,
+                                    "customer": customer_name
+                                }
+                                
+                                # Add file type to metadata
+                                file_extension = os.path.splitext(file_name)[1].lower()
+                                metadata["file_type"] = file_extension.lstrip('.')
+                                
+                                # For Excel files, try to extract and include sheet information
+                                if file_extension in ['.xlsx', '.xls'] and i < len(chunks) and hasattr(chunks[i], 'excel_html'):
+                                    metadata["content_type"] = "table"
+                                    # Store a reference to the HTML representation
+                                    metadata["has_table_html"] = True
+                                    
+                                    # If the original chunk has sheet name information, include it
+                                    if hasattr(chunks[i], 'metadata') and hasattr(chunks[i].metadata, 'sheet_name'):
+                                        metadata["sheet_name"] = chunks[i].metadata.sheet_name
+                                
+                                logger.info(f"Creating document for chunk {i+1} with metadata: {metadata}")
+                                doc = DocumentIn(
+                                    page_content=chunk,
+                                    metadata={**serialize_metadata(metadata),
+                                            "last_update": datetime.utcnow().isoformat() + "Z",
+                                            "id": f"{base_id}_{i:04d}"}
+                                )
+                                documents.append(doc)
+                        logger.info(f"Created {len(documents)} documents from contextualized chunks for {file_name}")
+                        logger.info(f"Starting indexing for {len(documents)} contextualized documents from {file_name}")
+                        await self.document_service.index_documents(documents)
+                        logger.info(f"Successfully indexed {len(documents)} contextualized documents from {file_name}")
                         await self.storage_manager.update_status(file_name, ProcessingStatus.COMPLETED)
                         logger.info(f"Completed processing file: {file_name}")
                     except Exception as e:

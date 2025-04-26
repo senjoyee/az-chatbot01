@@ -152,7 +152,7 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
           <ul className="list-disc pl-5 space-y-1">
             <li>Select up to 50 specific files for targeted searches</li>
             <li>Use "Select All" to search across the entire database</li>
-            <li>For summarization, you can now select multiple documents</li>
+            <li>For summarization, select only one document at a time</li>
           </ul>
         </div>
 
