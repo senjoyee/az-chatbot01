@@ -191,7 +191,8 @@ def retrieve_documents(state: AgentState) -> AgentState:
             state.documents = retriever_tool.run({
                 "query": state.question,
                 "k": 15,
-                "filters": filter_expression
+                "filters": filter_expression,
+                "queryType": "hybrid"
             })
             
             logger.info(f"Retrieved {len(state.documents)} documents")
@@ -338,25 +339,25 @@ def retrieve_documents_for_summary(state: AgentState) -> AgentState:
     """
     logger.info(f"Retrieving documents for summary: {state.question}")
     try:
-        # For summarization, only allow a single document
-        if state.selected_files and len(state.selected_files) > 1:
-            logger.info(f"Multiple files selected for summary ({len(state.selected_files)}). Limiting to single document only.")
-            state.response = "I can only summarize one document at a time. Please select a single document for summarization."
-            state.should_stop = True
-            return state
-        
-        # Build filters based on available criteria - similar to retrieve_documents
+        # Build file filters for summarization, allowing multiple selections
         filter_expression = None
         filter_parts = []
-        
-        # For summarization, we only use file filters, not customer filters
-        
-        # Add file filter if files are selected
-        if state.selected_files and len(state.selected_files) == 1:
-            # Escape single quotes by doubling them
-            file_filters = f"source eq '{state.selected_files[0].replace(chr(39), chr(39)*2)}'"
-            filter_parts.append(f"({file_filters})")
-            logger.info(f"Adding file filter for summary: {state.selected_files[0]}")
+        # Use only file filters for summarization
+        if state.selected_files and len(state.selected_files) > 0:
+            SELECT_ALL_THRESHOLD = 100
+            MAX_FILES_IN_FILTER = 50
+            selected = state.selected_files
+            if len(selected) > SELECT_ALL_THRESHOLD:
+                logger.info(f"Large selection for summary ({len(selected)}), treating as 'select all'")
+            else:
+                if len(selected) > MAX_FILES_IN_FILTER:
+                    logger.warning(f"Too many files for summary ({len(selected)}), limiting to {MAX_FILES_IN_FILTER}")
+                    selected = selected[:MAX_FILES_IN_FILTER]
+                file_filters = " or ".join([
+                    f"source eq '{f.replace(chr(39), chr(39)*2)}'" for f in selected
+                ])
+                filter_parts.append(f"({file_filters})")
+                logger.info(f"Adding file filters for summary: {file_filters}")
         
         # Combine filters if present
         if filter_parts:

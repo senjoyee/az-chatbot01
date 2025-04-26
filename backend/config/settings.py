@@ -24,5 +24,8 @@ AZURE_OPENAI_ENDPOINT_SC = os.getenv("AZURE_OPENAI_ENDPOINT_SC")
 BLOB_CONN_STRING = os.getenv("BLOB_CONN_STRING")
 BLOB_CONTAINER = os.getenv("BLOB_CONTAINER")
 
+# Flag to indicate loading whole documents instead of splitting
+USE_WHOLE_DOCUMENTS = os.getenv("USE_WHOLE_DOCUMENTS", "true").lower() == "true"
+
 # Construct Azure Search endpoint (exactly as in original implementation)
 AZURE_SEARCH_SERVICE_ENDPOINT = f"https://{AZURE_SEARCH_SERVICE}.search.windows.net"

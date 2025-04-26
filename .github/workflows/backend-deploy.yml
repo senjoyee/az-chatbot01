@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - long-rag
     paths:
       - 'backend/**'
       - '.github/workflows/backend-deploy.yml'

@@ -3,6 +3,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.documents import Document
 from pydantic import BaseModel, Field
 import logging
+from typing import Optional
 
 from config.azure_search import vector_store
 
@@ -13,6 +14,7 @@ class RetrieverInput(BaseModel):
     query: str = Field(..., description="The query to search for")
     k: int = Field(default=10, description="Number of documents to retrieve")
     filters: Optional[str] = Field(default=None, description="Optional filter expression to apply")
+    queryType: Optional[str] = Field(default="hybrid", description="Search type: 'hybrid' or 'simple'")
 
 class RetrieverTool(BaseTool):
     """Tool for retrieving documents using hybrid search."""
@@ -22,10 +24,10 @@ class RetrieverTool(BaseTool):
     Input should be a natural language query."""
     args_schema: ClassVar[type[BaseModel]] = RetrieverInput
 
-    def _run(self, query: str, k: int = 10, filters: Optional[str] = None) -> List[Document]:
+    def _run(self, query: str, k: int = 10, filters: Optional[str] = None, queryType: str = "hybrid") -> List[Document]:
         """Run the tool."""
         try:
-            logger.info(f"Executing retriever with query: '{query}', k: {k}, filters: '{filters}'")
+            logger.info(f"Executing retriever with query: '{query}', k: {k}, filters: '{filters}', queryType: '{queryType}'")
             
             # Debug the filter format
             if filters:
@@ -36,13 +38,11 @@ class RetrieverTool(BaseTool):
                     logger.warning(f"Filter expression is too long ({len(filters)} chars). Azure Search may have issues with it.")
                     logger.warning("Consider reducing the number of selected files.")
             
-            # Execute the search with filters using semantic hybrid search
-            # This leverages Azure AI Search's semantic ranking capabilities
-            documents = vector_store.semantic_hybrid_search(
-                query,
-                k=k,
-                filters=filters
-            )
+            # Choose search method based on queryType
+            if queryType.lower() == "simple":
+                documents = vector_store.search(query, k=k, filters=filters)
+            else:
+                documents = vector_store.semantic_hybrid_search(query, k=k, filters=filters)
             
             # Log the results
             logger.info(f"Retrieved {len(documents)} documents")
