@@ -293,15 +293,17 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                     />
                   </div>
                 </div>
+                {/* Force summarize button to always be visible with !important flag */}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="ml-2 p-1 h-7 w-7"
+                  className="ml-2 p-1 h-7 w-7 !block"
                   title="Summarize document"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleSummarize(file.id);
                   }}
+                  style={{display: 'flex'}}
                 >
                   <FileText className="h-4 w-4 text-gray-500" />
                 </Button>
