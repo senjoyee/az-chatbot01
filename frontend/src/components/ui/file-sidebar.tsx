@@ -265,50 +265,57 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
             {indexedFiles.map((file) => (
               <div
                 key={file.id}
-                className={`flex items-center p-2 rounded-md cursor-pointer transition-colors ${
+                className={`grid grid-cols-[auto_1fr_auto_auto] gap-2 items-center p-2 rounded-md cursor-pointer transition-colors ${
                   selectedFiles.includes(file.id)
                     ? 'bg-blue-100 text-blue-800'
                     : 'hover:bg-gray-100 text-gray-700'
                 }`}
               >
+                {/* File icon */}
+                <div className="flex-shrink-0" onClick={() => handleFileSelection(file.id)}>
+                  <FileIcon className="h-5 w-5 text-gray-500" />
+                </div>
+                
+                {/* Filename with tooltip */}
                 <div 
-                  className="flex items-center flex-1 min-w-0 overflow-hidden mr-2"
+                  className="truncate min-w-0"
+                  onClick={() => handleFileSelection(file.id)}
+                  title={file.name}
+                >
+                  <p className="text-sm font-medium truncate">
+                    {file.name}
+                  </p>
+                </div>
+                
+                {/* Selection checkbox - always visible */}
+                <div 
+                  className="flex-shrink-0"
                   onClick={() => handleFileSelection(file.id)}
                 >
-                  <div className="flex-shrink-0 mr-2">
-                    <FileIcon className="h-5 w-5 text-gray-500" />
-                  </div>
-                  <div className="flex-1 min-w-0 overflow-hidden">
-                    <p 
-                      className="text-sm font-medium truncate" 
-                      title={file.name}
-                    >
-                      {file.name}
-                    </p>
-                  </div>
-                  <div className="flex-shrink-0 ml-2">
-                    <CheckCircle
-                      className={`h-4 w-4 ${
-                        selectedFiles.includes(file.id)
-                          ? 'text-blue-600'
-                          : 'text-gray-300'
-                      }`}
-                    />
-                  </div>
+                  <CheckCircle
+                    className={`h-4 w-4 ${
+                      selectedFiles.includes(file.id)
+                        ? 'text-blue-600'
+                        : 'text-gray-300'
+                    }`}
+                  />
                 </div>
-                {/* Fixed-width summarize button that won't be affected by long filenames */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="flex-shrink-0 ml-1 p-1 h-7 w-7"
-                  title="Summarize document"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleSummarize(file.id);
-                  }}
-                >
-                  <FileText className="h-4 w-4 text-gray-500" />
-                </Button>
+                
+                {/* Summarize button - always visible and fixed position */}
+                <div className="flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="p-1 h-7 w-7"
+                    title="Summarize document"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSummarize(file.id);
+                    }}
+                  >
+                    <FileText className="h-4 w-4 text-gray-500" />
+                  </Button>
+                </div>
               </div>
             ))}
           </div>
