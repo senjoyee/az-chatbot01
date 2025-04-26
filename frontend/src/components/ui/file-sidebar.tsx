@@ -272,18 +272,21 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                 }`}
               >
                 <div 
-                  className="flex items-center flex-1"
+                  className="flex items-center flex-1 min-w-0 overflow-hidden mr-2"
                   onClick={() => handleFileSelection(file.id)}
                 >
                   <div className="flex-shrink-0 mr-2">
                     <FileIcon className="h-5 w-5 text-gray-500" />
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">
+                  <div className="flex-1 min-w-0 overflow-hidden">
+                    <p 
+                      className="text-sm font-medium truncate" 
+                      title={file.name}
+                    >
                       {file.name}
                     </p>
                   </div>
-                  <div className="ml-2">
+                  <div className="flex-shrink-0 ml-2">
                     <CheckCircle
                       className={`h-4 w-4 ${
                         selectedFiles.includes(file.id)
@@ -293,17 +296,16 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                     />
                   </div>
                 </div>
-                {/* Force summarize button to always be visible with !important flag */}
+                {/* Fixed-width summarize button that won't be affected by long filenames */}
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="ml-2 p-1 h-7 w-7 !block"
+                  className="flex-shrink-0 ml-1 p-1 h-7 w-7"
                   title="Summarize document"
                   onClick={(e) => {
                     e.stopPropagation();
                     handleSummarize(file.id);
                   }}
-                  style={{display: 'flex'}}
                 >
                   <FileText className="h-4 w-4 text-gray-500" />
                 </Button>
