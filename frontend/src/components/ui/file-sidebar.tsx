@@ -199,7 +199,7 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                 <p className="text-gray-600">Generating summary...</p>
               </div>
             ) : (
-              <div className="markdown-content font-noto-sans text-gray-900">
+              <div className="markdown-content font-noto-sans text-sm text-gray-900">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
                   {summaryContent}
                 </ReactMarkdown>
