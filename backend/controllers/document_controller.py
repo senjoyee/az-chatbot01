@@ -2,6 +2,7 @@ from fastapi import HTTPException
 from datetime import datetime
 import asyncio
 import logging
+import json
 
 from models.schemas import BlobEvent, DocumentIn, FileProcessingStatus, Message, Conversation
 from models.enums import ProcessingStatus
@@ -9,6 +10,7 @@ from services.document_service import DocumentService
 from services.azure_storage import AzureStorageManager
 from services.file_processor import FileProcessor
 from services.agent import run_agent
+from config.prompts import MINDMAP_TEMPLATE
 
 logger = logging.getLogger(__name__)
 
@@ -70,3 +72,65 @@ class DocumentController:
         except Exception as e:
             logger.error(f"Error generating summary for {filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
+            
+    async def generate_mindmap(self, filename: str):
+        """
+        Generate a mind map visualization data for the specified document
+        """
+        try:
+            logger.info(f"Generating mind map for document: {filename}")
+            
+            # First, get the document content
+            # We'll use the existing agent infrastructure to get the document content
+            content_prompt = f"Return the full content of the document {filename} without any additional commentary"
+            
+            # Create an empty conversation history and pass only the single file for selection
+            empty_history = []
+            
+            # Get the document content
+            content_result = await run_agent(
+                question=content_prompt,
+                chat_history=empty_history,
+                selected_files=[filename]
+            )
+            
+            document_content = content_result.get("response", "")
+            
+            if not document_content:
+                raise HTTPException(status_code=404, detail=f"Could not retrieve content for document: {filename}")
+            
+            # Create a mind map generation request using the template
+            mindmap_prompt = MINDMAP_TEMPLATE.format(document_content=document_content)
+            
+            # Generate the mind map using the agent
+            mindmap_result = await run_agent(
+                question=mindmap_prompt,
+                chat_history=empty_history,
+                selected_files=[]
+            )
+            
+            # Extract the JSON from the response
+            mindmap_response = mindmap_result.get("response", "")
+            
+            # The response might contain markdown code blocks, so we need to extract the JSON
+            try:
+                # Try to find JSON in the response (it might be wrapped in ```json ... ``` blocks)
+                json_start = mindmap_response.find('{')
+                json_end = mindmap_response.rfind('}')
+                
+                if json_start >= 0 and json_end >= 0:
+                    json_str = mindmap_response[json_start:json_end+1]
+                    mindmap_data = json.loads(json_str)
+                else:
+                    # If no JSON found, try to parse the whole response
+                    mindmap_data = json.loads(mindmap_response)
+                    
+                logger.info(f"Generated mind map for {filename}")
+                return {"mindmap": mindmap_data}
+            except json.JSONDecodeError as je:
+                logger.error(f"Error parsing mind map JSON: {str(je)}")
+                raise HTTPException(status_code=500, detail=f"Failed to parse mind map data: {str(je)}")
+                
+        except Exception as e:
+            logger.error(f"Error generating mind map for {filename}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to generate mind map: {str(e)}")

@@ -30,6 +30,45 @@ Analyze the history, then write the improved standalone question:
 
 Standalone Question:"""
 
+# Prompt for generating a mind map from document content
+# =========================================================
+# 2️⃣  MINDMAP TEMPLATE  –  Document Mind Map Generation
+# =========================================================
+MINDMAP_TEMPLATE = """Generate a hierarchical mind map structure from the following document. Extract the main topic, key concepts, and their relationships.
+
+Follow these guidelines:
+1. IDENTIFY MAIN TOPIC: Create a central node representing the document's primary subject
+2. EXTRACT KEY CONCEPTS: Identify 4-9 major themes/categories as primary branches
+3. ADD SUBTOPICS: For each primary branch, add 2-5 relevant subtopics
+4. MAINTAIN HIERARCHY: Ensure a clear parent-child relationship between nodes
+5. USE CONCISE LABELS: Keep node labels brief (1-5 words) but descriptive
+
+Return the mind map as a JSON object with this exact structure:
+{{
+  "name": "Main Topic",
+  "children": [
+    {{
+      "name": "Primary Branch 1",
+      "children": [
+        {{ "name": "Subtopic 1.1" }},
+        {{ "name": "Subtopic 1.2" }}
+      ]
+    }},
+    {{
+      "name": "Primary Branch 2",
+      "children": [
+        {{ "name": "Subtopic 2.1" }},
+        {{ "name": "Subtopic 2.2" }}
+      ]
+    }}
+  ]
+}}
+
+Document Content:
+{document_content}
+
+Mind Map JSON:"""
+
 # Prompt for generating an answer based on retrieved documents
 # =========================================================
 #  2️⃣  ANSWER TEMPLATE  –  Retrieval‑based Question‑Answering

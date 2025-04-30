@@ -26,3 +26,10 @@ async def summarize_document(filename: str = Path(..., description="The filename
     Generate a summary for the specified document.
     """
     return await controller.summarize_document(filename)
+
+@router.get("/mindmap/{filename}")
+async def generate_mindmap(filename: str = Path(..., description="The filename to create a mind map for"), controller: DocumentController = Depends()):
+    """
+    Generate a mind map visualization data for the specified document.
+    """
+    return await controller.generate_mindmap(filename)

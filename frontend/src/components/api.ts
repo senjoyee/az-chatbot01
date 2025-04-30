@@ -248,3 +248,33 @@ export const summarizeDocument = async (filename: string): Promise<{summary: str
     throw error;
   }
 };
+
+export interface MindMapNode {
+  name: string;
+  children?: MindMapNode[];
+}
+
+export interface MindMapResponse {
+  mindmap: MindMapNode;
+}
+
+export const generateMindMap = async (filename: string): Promise<MindMapResponse> => {
+  try {
+    console.log('Requesting mind map for:', filename);
+    const response = await fetch(`${API_BASE_URL}/mindmap/${encodeURIComponent(filename)}`, {
+      method: 'GET',
+      credentials: 'include',
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Mind map request failed:', response.status, errorText);
+      throw new Error(`Failed to generate mind map: ${response.status} ${errorText}`);
+    }
+    
+    return response.json();
+  } catch (error) {
+    handleApiError(error, 'mind map generation');
+    throw error;
+  }
+};

@@ -1,16 +1,17 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { listFiles, summarizeDocument } from '../api'
+import { listFiles, summarizeDocument, generateMindMap, MindMapNode } from '../api'
 import { FileItem, FileProcessingStatus } from '../types'
 import { Button } from './button'
 import { ScrollArea } from './scroll-area'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './dialog'
-import { RefreshCw, FileIcon, CheckCircle, ChevronRight, FileText, Copy, Check } from 'lucide-react'
+import { RefreshCw, FileIcon, CheckCircle, ChevronRight, FileText, Copy, Check, Network } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { copyToClipboard } from '../../utils/copy-utils'
 import { toast } from 'sonner'
+import { MindMap } from './mind-map'
 
 interface FileSidebarProps {
   onFileSelectionChange?: (selectedFiles: string[]) => void
@@ -57,6 +58,10 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
   const [summarizing, setSummarizing] = useState(false)
   const [summaryContent, setSummaryContent] = useState<string>('')
   const [summaryFileName, setSummaryFileName] = useState<string>('')
+  const [mindMapOpen, setMindMapOpen] = useState(false)
+  const [generatingMindMap, setGeneratingMindMap] = useState(false)
+  const [mindMapData, setMindMapData] = useState<MindMapNode | null>(null)
+  const [mindMapFileName, setMindMapFileName] = useState<string>('')
 
   // Only show completed files
   const indexedFiles = files.filter(file => file.status === FileProcessingStatus.COMPLETED)
@@ -174,6 +179,27 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
       setSummarizing(false);
     }
   };
+  
+  // Handle mind map generation
+  const handleGenerateMindMap = async (fileId: string) => {
+    try {
+      // Don't allow mind map generation if already generating
+      if (generatingMindMap) return;
+      
+      setGeneratingMindMap(true);
+      setMindMapFileName(fileId);
+      setMindMapData(null);
+      setMindMapOpen(true);
+      
+      const result = await generateMindMap(fileId);
+      setMindMapData(result.mindmap);
+    } catch (error) {
+      console.error('Error generating mind map:', error);
+      toast.error('Error generating mind map. Please try again later.');
+    } finally {
+      setGeneratingMindMap(false);
+    }
+  };
 
   return (
     <ScrollArea className="h-full flex flex-col w-full font-sans">
@@ -208,6 +234,14 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
           </div>
         </DialogContent>
       </Dialog>
+      
+      <MindMap
+        open={mindMapOpen}
+        onOpenChange={setMindMapOpen}
+        data={mindMapData}
+        filename={mindMapFileName}
+        loading={generatingMindMap}
+      />
       <div className="p-4">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center">
@@ -301,8 +335,9 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                   />
                 </div>
                 
-                {/* Summarize button - always visible and fixed position */}
-                <div className="flex-shrink-0">
+                {/* Action buttons container */}
+                <div className="flex-shrink-0 flex space-x-1">
+                  {/* Summarize button */}
                   <Button
                     variant="ghost"
                     size="sm"
@@ -314,6 +349,20 @@ export function FileSidebar({ onFileSelectionChange }: FileSidebarProps) {
                     }}
                   >
                     <FileText className="h-4 w-4 text-gray-500" />
+                  </Button>
+                  
+                  {/* Mind Map button */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="p-1 h-7 w-7"
+                    title="Generate mind map"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleGenerateMindMap(file.id);
+                    }}
+                  >
+                    <Network className="h-4 w-4 text-gray-500" />
                   </Button>
                 </div>
               </div>
