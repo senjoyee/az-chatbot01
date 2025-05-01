@@ -11,6 +11,8 @@ from services.azure_storage import AzureStorageManager
 from services.file_processor import FileProcessor
 from services.agent import run_agent
 from config.prompts import MINDMAP_TEMPLATE
+from langchain_openai import AzureChatOpenAI
+from config.settings import AZURE_OPENAI_ENDPOINT_SC, AZURE_OPENAI_API_KEY_SC
 
 logger = logging.getLogger(__name__)
 
@@ -102,17 +104,17 @@ class DocumentController:
             # Create a mind map generation request using the template
             mindmap_prompt = MINDMAP_TEMPLATE.format(document_content=document_content)
             
-            # Generate the mind map using the agent
-            mindmap_result = await run_agent(
-                question=mindmap_prompt,
-                chat_history=empty_history,
-                selected_files=[]
+            # Generate the mind map via direct AzureChatOpenAI call
+            llm = AzureChatOpenAI(
+                azure_deployment="gpt-4.1-mini",
+                openai_api_version="2024-12-01-preview",
+                azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
+                api_key=AZURE_OPENAI_API_KEY_SC,
+                temperature=0.3
             )
+            mindmap_response = await llm.apredict(mindmap_prompt)
             
             # Extract the JSON from the response
-            mindmap_response = mindmap_result.get("response", "")
-            
-            # The response might contain markdown code blocks, so we need to extract the JSON
             try:
                 # Try to find JSON in the response (it might be wrapped in ```json ... ``` blocks)
                 json_start = mindmap_response.find('{')
