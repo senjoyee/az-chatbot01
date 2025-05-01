@@ -82,11 +82,14 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           left: '2%',
           bottom: '2%',
           right: '2%',
-          symbolSize: 14,
+          symbolSize: 12,
           initialTreeDepth: 1, // Expand only first two levels (root=0, children=1)
           layout: 'orthogonal', // Use orthogonal layout for a cleaner look
           orient: 'LR', // Left to right orientation
           roam: true, // Enable panning and zooming
+          edgeShape: 'polyline',
+          nodeGap: 20, // Reduce gap between nodes
+          layerPadding: 80, // Reduce distance between layers
           label: {
             position: 'right',
             verticalAlign: 'middle',
