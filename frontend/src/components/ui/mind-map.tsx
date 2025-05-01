@@ -83,7 +83,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           bottom: '2%',
           right: '2%',
           symbolSize: 14,
-          initialTreeDepth: -1, // Expand all nodes initially
+          initialTreeDepth: 2, // Expand top two levels
           layout: 'orthogonal', // Use orthogonal layout for a cleaner look
           orient: 'LR', // Left to right orientation
           roam: true, // Enable panning and zooming
