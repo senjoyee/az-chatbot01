@@ -69,7 +69,8 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
         show: true,
         feature: {
           restore: { show: true, title: 'Reset' },
-          saveAsImage: { show: true, title: 'Save Image' }
+          saveAsImage: { show: true, title: 'Save Image' },
+          dataZoom: { show: true, title: 'Zoom' }
         },
         right: 20,
         top: 20
@@ -78,10 +79,10 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
         {
           type: 'tree',
           data: [data],
-          top: 0,
-          left: 0,
-          bottom: 0,
-          right: 0,
+          top: 5,
+          left: 5,
+          bottom: 5,
+          right: 5,
           symbolSize: 12,
           initialTreeDepth: 1, // Expand only first two levels (root=0, children=1)
           layout: 'orthogonal', // Use orthogonal layout for a cleaner look
@@ -89,6 +90,8 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           roam: true, // Enable panning and zooming
           nodeGap: 20, // Reduce gap between nodes
           layerPadding: 80, // Significantly reduce distance between layers
+          zoom: 1, // Default zoom level
+          center: ['50%', '50%'], // Center the chart
           label: {
             position: 'right',
             verticalAlign: 'middle',
@@ -174,7 +177,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
             )}
           </div>
         </DialogHeader>
-        <div className="flex-1 overflow-hidden">
+        <div className="absolute inset-0 top-[60px] overflow-hidden">
           {loading ? (
             <div className="flex flex-col items-center justify-center h-full font-noto-sans">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-700 mb-4"></div>
@@ -185,9 +188,22 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
               <ReactECharts
                 option={getOption()}
                 style={{ height: '100%', width: '100%' }}
-                opts={{ renderer: 'canvas' }}
+                opts={{ renderer: 'canvas', devicePixelRatio: window.devicePixelRatio }}
                 notMerge={true}
                 lazyUpdate={true}
+                className="w-full h-full"
+                onEvents={{
+                  'rendered': (chart: any) => {
+                    // Force resize after rendering to ensure proper layout
+                    setTimeout(() => {
+                      window.dispatchEvent(new Event('resize'))
+                      // Auto-fit content to view
+                      if (chart && chart.resize) {
+                        chart.resize()
+                      }
+                    }, 100)
+                  }
+                }}
               />
             </div>
           ) : (
