@@ -3,6 +3,11 @@ from datetime import datetime
 import asyncio
 import logging
 import json
+import os
+from unstructured.partition.pdf import partition_pdf
+from unstructured.partition.docx import partition_docx
+from unstructured.partition.xlsx import partition_xlsx
+from unstructured.partition.pptx import partition_pptx
 
 from models.schemas import BlobEvent, DocumentIn, FileProcessingStatus, Message, Conversation
 from models.enums import ProcessingStatus
@@ -82,24 +87,20 @@ class DocumentController:
         try:
             logger.info(f"Generating mind map for document: {filename}")
             
-            # First, get the document content
-            # We'll use the existing agent infrastructure to get the document content
-            content_prompt = f"Return the full content of the document {filename} without any additional commentary"
-            
-            # Create an empty conversation history and pass only the single file for selection
-            empty_history = []
-            
-            # Get the document content
-            content_result = await run_agent(
-                question=content_prompt,
-                chat_history=empty_history,
-                selected_files=[filename]
-            )
-            
-            document_content = content_result.get("response", "")
-            
-            if not document_content:
-                raise HTTPException(status_code=404, detail=f"Could not retrieve content for document: {filename}")
+            # Download the document to local file and extract text
+            file_path = await self.storage_manager.download_file(filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext == '.pdf':
+                elements = partition_pdf(filename=file_path, strategy='fast', include_metadata=True)
+            elif ext in ['.doc', '.docx']:
+                elements = partition_docx(filename=file_path)
+            elif ext in ['.xlsx', '.xls']:
+                elements = partition_xlsx(filename=file_path)
+            elif ext in ['.ppt', '.pptx']:
+                elements = partition_pptx(filename=file_path)
+            else:
+                raise HTTPException(status_code=400, detail=f'Unsupported file type: {ext}')
+            document_content = ' '.join([el.text for el in elements if hasattr(el, 'text') and el.text.strip()])
             
             # Create a mind map generation request using the template
             mindmap_prompt = MINDMAP_TEMPLATE.format(document_content=document_content)
