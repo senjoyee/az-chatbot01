@@ -87,9 +87,8 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           layout: 'orthogonal', // Use orthogonal layout for a cleaner look
           orient: 'LR', // Left to right orientation
           roam: true, // Enable panning and zooming
-          edgeShape: 'polyline',
           nodeGap: 20, // Reduce gap between nodes
-          layerPadding: 80, // Reduce distance between layers
+          layerPadding: 120, // Moderate distance between layers
           label: {
             position: 'right',
             verticalAlign: 'middle',
@@ -127,7 +126,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           animationDurationUpdate: 750,
           lineStyle: {
             width: 1.5,
-            curveness: 0.4,
+            curveness: 0.3,
             color: '#aaa'
           },
           itemStyle: {
