@@ -78,17 +78,17 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
         {
           type: 'tree',
           data: [data],
-          top: '5%',
-          left: '2%',
-          bottom: '2%',
-          right: '2%',
+          top: '10%',
+          left: '5%',
+          bottom: '5%',
+          right: '5%',
           symbolSize: 12,
           initialTreeDepth: 1, // Expand only first two levels (root=0, children=1)
           layout: 'orthogonal', // Use orthogonal layout for a cleaner look
           orient: 'LR', // Left to right orientation
           roam: true, // Enable panning and zooming
           nodeGap: 20, // Reduce gap between nodes
-          layerPadding: 120, // Moderate distance between layers
+          layerPadding: 80, // Significantly reduce distance between layers
           label: {
             position: 'right',
             verticalAlign: 'middle',
