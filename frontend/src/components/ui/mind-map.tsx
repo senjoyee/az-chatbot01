@@ -78,10 +78,10 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
         {
           type: 'tree',
           data: [data],
-          top: '10%',
-          left: '5%',
-          bottom: '5%',
-          right: '5%',
+          top: 0,
+          left: 0,
+          bottom: 0,
+          right: 0,
           symbolSize: 12,
           initialTreeDepth: 1, // Expand only first two levels (root=0, children=1)
           layout: 'orthogonal', // Use orthogonal layout for a cleaner look
@@ -160,7 +160,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-[95vw] h-[95vh] max-h-[95vh] overflow-hidden p-0 font-noto-sans">
+      <DialogContent className="w-full h-full max-w-full max-h-full overflow-hidden p-0 font-noto-sans">
         <DialogHeader className="p-4 border-b">
           <div className="flex items-center justify-between">
             <div className="font-noto-sans">
