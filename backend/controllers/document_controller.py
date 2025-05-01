@@ -15,7 +15,7 @@ from services.document_service import DocumentService
 from services.azure_storage import AzureStorageManager
 from services.file_processor import FileProcessor
 from services.agent import run_agent
-from config.prompts import MINDMAP_TEMPLATE
+from config.prompts import MINDMAP_TEMPLATE, SUMMARY_TEMPLATE
 from langchain_openai import AzureChatOpenAI
 from config.settings import AZURE_OPENAI_ENDPOINT_SC, AZURE_OPENAI_API_KEY_SC
 
@@ -57,24 +57,43 @@ class DocumentController:
         Generate a summary for the specified document using the agent's summarization capabilities
         """
         try:
-            logger.info(f"Generating summary for document: {filename}")
+            logger.info(f"Generating summary for document: {filename}\n")
             
-            # Create a summarization request
-            summarization_prompt = f"Summarize the document {filename}"
+            # Download and extract document text
+            file_path = await self.storage_manager.download_file(filename)
+            ext = os.path.splitext(filename)[1].lower()
+            if ext == '.pdf':
+                elements = partition_pdf(filename=file_path, strategy='fast', include_metadata=True)
+            elif ext in ['.doc', '.docx']:
+                elements = partition_docx(filename=file_path)
+            elif ext in ['.xlsx', '.xls']:
+                elements = partition_xlsx(filename=file_path)
+            elif ext in ['.ppt', '.pptx']:
+                elements = partition_pptx(filename=file_path)
+            else:
+                raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
+            document_content = ' '.join([el.text for el in elements if hasattr(el, 'text') and el.text.strip()])
             
-            # We'll create an empty conversation history and pass only the single file for selection
-            empty_history = []
-            
-            # Use the existing agent with its summarization capabilities
-            result = await run_agent(
-                question=summarization_prompt,
-                chat_history=empty_history,
-                selected_files=[filename]
+            # Create and send summary prompt
+            summary_prompt = SUMMARY_TEMPLATE.format(context=document_content)
+            llm = AzureChatOpenAI(
+                azure_deployment="gpt-4.1-mini",
+                openai_api_version="2024-12-01-preview",
+                azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
+                api_key=AZURE_OPENAI_API_KEY_SC,
+                temperature=0.3
             )
+            summary_response = await llm.apredict(summary_prompt)
             
-            summary = result.get("response", "Unable to generate summary")
+            # Extract content between <answer> tags if present
+            start_idx = summary_response.find('<answer>')
+            end_idx = summary_response.find('</answer>')
+            if start_idx >= 0 and end_idx > start_idx:
+                summary = summary_response[start_idx+len('<answer>'):end_idx].strip()
+            else:
+                summary = summary_response.strip()
+            
             logger.info(f"Generated summary for {filename}")
-            
             return {"summary": summary}
         except Exception as e:
             logger.error(f"Error generating summary for {filename}: {str(e)}")
