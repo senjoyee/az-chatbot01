@@ -54,26 +54,48 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
     if (!data) return {}
 
     return {
+      backgroundColor: '#fff',
       tooltip: {
         trigger: 'item',
-        triggerOn: 'mousemove'
+        triggerOn: 'mousemove',
+        formatter: '{b}',
+        backgroundColor: 'rgba(50,50,50,0.9)',
+        borderColor: '#777',
+        textStyle: {
+          color: '#fff'
+        }
+      },
+      toolbox: {
+        show: true,
+        feature: {
+          restore: { show: true, title: 'Reset' },
+          saveAsImage: { show: true, title: 'Save Image' }
+        },
+        right: 20,
+        top: 20
       },
       series: [
         {
           type: 'tree',
           data: [data],
-          top: '10%',
-          left: '5%',
-          bottom: '10%',
-          right: '20%',
-          symbolSize: 12,
-          initialTreeDepth: 3,
+          top: '5%',
+          left: '2%',
+          bottom: '2%',
+          right: '2%',
+          symbolSize: 14,
+          initialTreeDepth: -1, // Expand all nodes initially
+          layout: 'orthogonal', // Use orthogonal layout for a cleaner look
+          orient: 'LR', // Left to right orientation
+          roam: true, // Enable panning and zooming
           label: {
-            position: 'left',
+            position: 'right',
             verticalAlign: 'middle',
-            align: 'right',
+            align: 'left',
             fontSize: 14,
-            color: '#333'
+            color: '#333',
+            backgroundColor: 'rgba(245,245,245,0.8)',
+            padding: [4, 8, 4, 8],
+            borderRadius: 4
           },
           leaves: {
             label: {
@@ -83,15 +105,31 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
             }
           },
           emphasis: {
-            focus: 'descendant'
+            focus: 'descendant',
+            itemStyle: {
+              borderWidth: 2,
+              borderColor: '#3771c8'
+            },
+            lineStyle: {
+              width: 2,
+              color: '#3771c8'
+            },
+            label: {
+              fontWeight: 'bold',
+              color: '#3771c8'
+            }
           },
           expandAndCollapse: true,
           animationDuration: 550,
           animationDurationUpdate: 750,
           lineStyle: {
             width: 1.5,
-            curveness: 0.5,
+            curveness: 0.4,
             color: '#aaa'
+          },
+          itemStyle: {
+            color: '#6b9ac4',
+            borderColor: '#4d7ca8'
           }
         }
       ]
@@ -120,11 +158,11 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto font-noto-sans">
-        <DialogHeader>
+      <DialogContent className="w-[95vw] max-w-[95vw] h-[95vh] max-h-[95vh] overflow-hidden p-0 font-noto-sans">
+        <DialogHeader className="p-4 border-b">
           <div className="flex items-center justify-between">
             <div className="font-noto-sans">
-              <DialogTitle className="font-noto-sans">Document Mind Map</DialogTitle>
+              <DialogTitle className="font-noto-sans text-xl">Document Mind Map</DialogTitle>
               <DialogDescription className="text-sm text-gray-500 font-noto-sans">
                 {filename}
               </DialogDescription>
@@ -134,22 +172,24 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
             )}
           </div>
         </DialogHeader>
-        <div className="py-4">
+        <div className="flex-1 overflow-hidden">
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-8 font-noto-sans">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-700 mb-4"></div>
-              <p className="text-gray-600">Generating mind map...</p>
+            <div className="flex flex-col items-center justify-center h-full font-noto-sans">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-gray-700 mb-4"></div>
+              <p className="text-gray-600 text-lg">Generating mind map...</p>
             </div>
           ) : data ? (
-            <div className="w-full h-[60vh]">
+            <div className="w-full h-full">
               <ReactECharts
                 option={getOption()}
                 style={{ height: '100%', width: '100%' }}
                 opts={{ renderer: 'canvas' }}
+                notMerge={true}
+                lazyUpdate={true}
               />
             </div>
           ) : (
-            <div className="text-center py-8 text-gray-500">
+            <div className="flex items-center justify-center h-full text-gray-500 text-lg">
               No mind map data available
             </div>
           )}

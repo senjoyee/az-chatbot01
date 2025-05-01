@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - mind-map
     paths:
       - 'backend/**'
       - '.github/workflows/backend-deploy.yml'
