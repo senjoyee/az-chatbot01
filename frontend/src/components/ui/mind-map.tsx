@@ -160,7 +160,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-full h-full max-w-full max-h-full overflow-hidden p-0 font-noto-sans">
+      <DialogContent className="fixed inset-0 w-screen h-screen max-w-none max-h-none translate-x-0 translate-y-0 left-0 top-0 overflow-hidden p-0 font-noto-sans rounded-none border-0">
         <DialogHeader className="p-4 border-b">
           <div className="flex items-center justify-between">
             <div className="font-noto-sans">
