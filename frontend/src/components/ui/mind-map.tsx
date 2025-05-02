@@ -139,7 +139,9 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
         }
       ]
     };
-    console.log('MindMap option:', option);
+    console.log('MindMap option JSON:', JSON.stringify(option, null, 2));
+    console.log('MindMap layerGap:', option.series[0]?.layerGap);
+    console.log('MindMap nodeGap:', option.series[0]?.nodeGap);
     return option;
   }
 
