@@ -53,7 +53,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
   const getOption = () => {
     if (!data) return {}
 
-    return {
+    const option = {
       backgroundColor: '#fff',
       tooltip: {
         trigger: 'item',
@@ -138,7 +138,9 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           }
         }
       ]
-    }
+    };
+    console.log('MindMap option:', option);
+    return option;
   }
 
   // Get a flat string representation of the mind map for copying
