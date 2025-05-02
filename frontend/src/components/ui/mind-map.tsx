@@ -90,8 +90,8 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           roam: true, // Enable panning and zooming
           nodeGap: 20, // Reduce gap between nodes
           layerGap: 40, // Reduce horizontal gap between layers
-          zoom: 0.8, // Scale down the whole chart to fit deeper levels
-          center: ['20%', '50%'], // Shift chart leftward for more right space
+          zoom: 0.6, // Scale down the whole chart to fit deeper levels
+          center: ['50%', '50%'], // Reset center to original position
           label: {
             position: 'right',
             verticalAlign: 'middle',
