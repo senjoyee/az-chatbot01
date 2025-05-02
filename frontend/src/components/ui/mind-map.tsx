@@ -89,7 +89,7 @@ export function MindMap({ open, onOpenChange, data, filename, loading }: MindMap
           orient: 'LR', // Left to right orientation
           roam: true, // Enable panning and zooming
           nodeGap: 20, // Reduce gap between nodes
-          layerPadding: 80, // Significantly reduce distance between layers
+          layerPadding: 40, // Reduce horizontal gap between layers
           zoom: 1, // Default zoom level
           center: ['50%', '50%'], // Center the chart
           label: {
