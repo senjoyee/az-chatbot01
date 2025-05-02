@@ -77,7 +77,7 @@ class DocumentController:
             # Create and send summary prompt
             summary_prompt = SUMMARY_TEMPLATE.format(context=document_content)
             llm = AzureChatOpenAI(
-                azure_deployment="gpt-4.1-mini",
+                azure_deployment="gpt-4.1-nano",
                 openai_api_version="2024-12-01-preview",
                 azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
                 api_key=AZURE_OPENAI_API_KEY_SC,
@@ -126,7 +126,7 @@ class DocumentController:
             
             # Generate the mind map via direct AzureChatOpenAI call
             llm = AzureChatOpenAI(
-                azure_deployment="gpt-4.1-mini",
+                azure_deployment="gpt-4o-nano",
                 openai_api_version="2024-12-01-preview",
                 azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
                 api_key=AZURE_OPENAI_API_KEY_SC,

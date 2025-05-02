@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - mind-map
+      - summary2
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'
