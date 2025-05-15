@@ -70,14 +70,14 @@ fields = [
     ),
     SearchableField(
         name="source",
-        type=SearchFieldDataType.String,
+        type=SearchFieldDataType.Collection(SearchFieldDataType.String),
         filterable=True,
         facetable=True,
         searchable=True,
     ),
     SearchableField(
         name="customer",
-        type=SearchFieldDataType.String,
+        type=SearchFieldDataType.Collection(SearchFieldDataType.String),
         filterable=True,
         facetable=True,
         searchable=True,

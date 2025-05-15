@@ -10,7 +10,7 @@ from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 
 from .tools import RetrieverTool
-from utils.helpers import is_casual_conversation
+from utils.helpers import is_casual_conversation, escape_odata_filter_value
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
@@ -146,9 +146,10 @@ def retrieve_documents(state: AgentState) -> AgentState:
         # Add customer filter if customers are detected in the query
         if state.customers and len(state.customers) > 0:
             logger.info(f"Detected customers: {state.customers}")
-            customer_filters = " or ".join([f"customer eq '{customer}'" for customer in state.customers])
-            filter_parts.append(f"({customer_filters})")
-            logger.info(f"Adding customer filter: {customer_filters}")
+            # Escape any single quotes and join with commas for search.in function
+            customer_list = ",".join([escape_odata_filter_value(customer) for customer in state.customers])
+            filter_parts.append(f"customer/any(c: search.in(c, '{customer_list}'))")
+            logger.info(f"Adding customer filter using search.in(): {customer_list}")
             
         # Add file filter if files are selected
         if state.selected_files and len(state.selected_files) > 0:
@@ -168,10 +169,10 @@ def retrieve_documents(state: AgentState) -> AgentState:
                     logger.warning(f"Too many files selected ({len(selected_files)}). Limiting to {MAX_FILES_IN_FILTER} files.")
                     selected_files = selected_files[:MAX_FILES_IN_FILTER]
                 
-                # Escape single quotes by doubling them
-                file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in selected_files])
-                filter_parts.append(f"({file_filters})")
-                logger.info(f"Adding file filter for {len(selected_files)} files")
+                # Escape values and join with commas for search.in function
+                file_list = ",".join([escape_odata_filter_value(file) for file in selected_files])
+                filter_parts.append(f"source/any(s: search.in(s, '{file_list}'))")
+                logger.info(f"Adding file filter for {len(selected_files)} files using search.in()")
             
         # Combine filters if present
         if filter_parts:
@@ -353,9 +354,9 @@ def retrieve_documents_for_summary(state: AgentState) -> AgentState:
         
         # Add file filter if files are selected
         if state.selected_files and len(state.selected_files) == 1:
-            # Escape single quotes by doubling them
-            file_filters = f"source eq '{state.selected_files[0].replace(chr(39), chr(39)*2)}'"
-            filter_parts.append(f"({file_filters})")
+            # Escape values and use search.in with collection-typed field
+            escaped_file = escape_odata_filter_value(state.selected_files[0])
+            filter_parts.append(f"source/any(s: s eq '{escaped_file}')")
             logger.info(f"Adding file filter for summary: {state.selected_files[0]}")
         
         # Combine filters if present

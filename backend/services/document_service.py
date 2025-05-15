@@ -23,7 +23,7 @@ class DocumentService:
             logger.info(f"Searching for documents with source: {source}")
             documents_to_delete = search_client.search(
                 search_text="*",
-                filter=f"source eq '{escaped_source}'"
+                filter=f"source/any(s: s eq '{escaped_source}')"
             )
             deleted_count = 0
             for doc in documents_to_delete:
@@ -55,13 +55,17 @@ class DocumentService:
                     logger.error(f"Error generating embedding: {str(e)}")
                     continue
                 is_contextualized = "\n\n" in document.page_content
+                # Convert source and customer to collection format
+                source = document.metadata.get("source", "unknown")
+                customer = document.metadata.get("customer", "unknown").lower()
+                
                 document_obj = {
                     "id": document.metadata["id"],
                     "content": document.page_content,
                     "content_vector": embedding,
                     "metadata": json.dumps(document.metadata),
-                    "source": document.metadata.get("source", "unknown"),
-                    "customer": document.metadata.get("customer", "unknown").lower(),
+                    "source": [source],  # As collection
+                    "customer": [customer],  # As collection
                     "last_update": document.metadata["last_update"],
                     "contextualized": is_contextualized
                 }
