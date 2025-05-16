@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-      - summary2
+      - router-agent
     paths:
       - 'backend/**'
       - '.github/workflows/backend-deploy.yml'
