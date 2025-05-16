@@ -4,18 +4,24 @@ on:
   push:
     branches:
       - main
-      - summary2
+      - filter-optimization
     paths:
       - 'frontend/**'
       - '.github/workflows/frontend-deploy.yml'
   workflow_dispatch:
+    inputs:
+      deploy_manually:
+        description: 'Deploy manually after build'
+        required: false
+        default: false
+        type: boolean
 
 env:
   NODE_VERSION: '18'
   WORKING_DIRECTORY: ./frontend
   AZURE_CONTAINER_REGISTRY: jssapmscr
   IMAGE_NAME: frontend
-  IMAGE_TAG: latest
+  AZURE_WEBAPP_NAME: documentchatbot01  # Replace with your actual frontend webapp name
 
 jobs:
   build-and-push:
@@ -23,6 +29,14 @@ jobs:
     
     steps:
     - uses: actions/checkout@v4
+
+    - name: Generate unique image tag
+      id: tag
+      run: |
+        SHA_SHORT=$(echo ${{ github.sha }} | cut -c1-7)
+        TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
+        # Using the step output is more reliable than environment variables
+        echo "unique_tag=${SHA_SHORT}-${TIMESTAMP}" >> $GITHUB_OUTPUT
 
     - name: Set up Docker Buildx
       uses: docker/setup-buildx-action@v3
@@ -39,4 +53,31 @@ jobs:
       with:
         context: ${{ env.WORKING_DIRECTORY }}
         push: true
-        tags: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
+        tags: |
+          ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.unique_tag }}
+          ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:latest
+
+    - name: Output Deployment Information
+      run: |
+        echo "::notice::Image built and pushed successfully!"
+        echo "::notice::Image Tag: ${{ steps.tag.outputs.unique_tag }}"
+        echo "::notice::Full Image Name: ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.unique_tag }}"
+        echo "::notice::To deploy this image, run the following Azure CLI commands:"
+        echo "::notice::az webapp config container set --name ${{ env.AZURE_WEBAPP_NAME }} --resource-group YOUR_RESOURCE_GROUP \"
+        echo "::notice::  --docker-custom-image-name ${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.unique_tag }} \"
+        echo "::notice::  --docker-registry-server-url https://${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io \"
+        echo "::notice::  --docker-registry-server-user YOUR_REGISTRY_USERNAME \"
+        echo "::notice::  --docker-registry-server-password YOUR_REGISTRY_PASSWORD"
+        echo "::notice::az webapp restart --name ${{ env.AZURE_WEBAPP_NAME }} --resource-group YOUR_RESOURCE_GROUP"
+        
+        # Create a tag.txt file in the artifacts
+        mkdir -p deployment-info
+        echo "${{ steps.tag.outputs.unique_tag }}" > deployment-info/tag.txt
+        echo "${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.unique_tag }}" > deployment-info/image.txt
+    
+    - name: Upload Deployment Info
+      uses: actions/upload-artifact@v3
+      with:
+        name: frontend-deployment-info
+        path: deployment-info/
+        retention-days: 30
