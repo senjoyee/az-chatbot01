@@ -45,9 +45,24 @@ async def generate_single_document_summary(document_content: str, file_name_for_
     )
     
     try:
-        summary = await summary_chain.ainvoke({"context": document_content})
+        raw_summary = await summary_chain.ainvoke({"context": document_content})
+
+        # Strip <answer> tags
+        start_tag = "<answer>"
+        end_tag = "</answer>"
+        start_idx = raw_summary.find(start_tag)
+        end_idx = raw_summary.rfind(end_tag) # Use rfind for the last occurrence of end_tag
+
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            # Adjust start_idx to be after the tag itself
+            clean_summary = raw_summary[start_idx + len(start_tag):end_idx].strip()
+        else:
+            # If tags are not found as expected, return the raw summary but log a warning
+            logger.warning(f"<answer> tags not found in expected format for document '{file_name_for_logging}'. Returning raw summary.")
+            clean_summary = raw_summary.strip()
+
         logger.info(f"Successfully generated summary for document: {file_name_for_logging}")
-        return {"summary": summary}
+        return {"summary": clean_summary}
     except Exception as e:
         logger.error(f"Error generating summary for document '{file_name_for_logging}': {e}", exc_info=True)
         return {"error": f"Failed to generate summary for document '{file_name_for_logging}'. An LLM or processing error occurred."}
