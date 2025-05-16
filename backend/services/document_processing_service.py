@@ -2,7 +2,6 @@ import logging
 from typing import List, Optional, Dict, Any
 
 from langchain_openai import AzureChatOpenAI
-from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 
@@ -35,9 +34,8 @@ async def generate_single_document_summary(document_content: str, file_name_for_
         logger.warning(f"Document content for {file_name_for_logging} is empty or not provided.")
         return {"error": f"Document content for {file_name_for_logging} is empty."}
 
-    # Assuming SUMMARY_PROMPT is a string template like "Summarize: {text}"
-    # If SUMMARY_PROMPT is already a PromptTemplate object, this line should be: summary_prompt_template = SUMMARY_PROMPT
-    summary_prompt_template = PromptTemplate.from_template(SUMMARY_PROMPT)
+    # SUMMARY_PROMPT is already a PromptTemplate object from config.prompts
+    summary_prompt_template = SUMMARY_PROMPT
     
     summary_chain = (
         summary_prompt_template
