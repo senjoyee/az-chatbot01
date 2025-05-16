@@ -22,8 +22,7 @@ from config.settings import (
 from config.prompts import (
     CONDENSE_QUESTION_PROMPT,
     ANSWER_PROMPT,
-    CONVERSATION_PROMPT,
-    SUMMARY_PROMPT
+    CONVERSATION_PROMPT
 )
 
 from config.azure_search import vector_store
@@ -75,25 +74,6 @@ def detect_customers(query: str) -> List[str]:
     """
     query_lower = query.lower()
     return [name for name in CUSTOMER_NAMES if name.lower() in query_lower]
-
-def is_summary_request(query: str) -> bool:
-    """
-    Detect if the user is asking for a document summary.
-    Returns True if the query appears to be requesting a summary.
-    """
-    query_lower = query.lower()
-    summary_keywords = [
-        "summarize", "summary", "summarize this document", 
-        "give me a summary", "can you summarize", 
-        "provide a summary", "overview of this document",
-        "key points", "main points", "tldr", "tl;dr"
-    ]
-    
-    for keyword in summary_keywords:
-        if keyword in query_lower:
-            return True
-    
-    return False
 
 def condense_question(state: AgentState) -> AgentState:
     logger.info(f"Condensing question with state: {state}")
@@ -323,15 +303,6 @@ def detect_casual_talk(state: AgentState) -> AgentState:
     state.needs_casual_response = is_casual_conversation(state.question, llm_41_mini)
     return state
 
-def detect_summary_intent(state: AgentState) -> AgentState:
-    """
-    Detect if the user is requesting a document summary.
-    This is placed early in the workflow to enable proper routing.
-    """
-    state.is_summary_request = is_summary_request(state.question)
-    logger.info(f"Request identified as summary request: {state.is_summary_request}")
-    return state
-
 def respond_to_casual(state: AgentState) -> AgentState:
     state.response = llm_41_mini.invoke(
         CONVERSATION_PROMPT.format(
@@ -342,221 +313,41 @@ def respond_to_casual(state: AgentState) -> AgentState:
     state.should_stop = True
     return state
 
-def retrieve_documents_for_summary(state: AgentState) -> AgentState:
-    """
-    Retrieve documents specifically for summarization.
-    This function is optimized for comprehensive coverage rather than precision.
-    """
-    logger.info(f"Retrieving documents for summary: {state.question}")
-    try:
-        # For summarization, only allow a single document
-        if state.selected_files and len(state.selected_files) > 1:
-            logger.info(f"Multiple files selected for summary ({len(state.selected_files)}). Limiting to single document only.")
-            state.response = "I can only summarize one document at a time. Please select a single document for summarization."
-            state.should_stop = True
-            return state
-        
-        # Build filters based on available criteria - similar to retrieve_documents
-        filter_expression = None
-        filter_parts = []
-        
-        # For summarization, we only use file filters, not customer filters
-        
-        # Add file filter if files are selected
-        if state.selected_files and len(state.selected_files) == 1:
-            # Escape single quotes by doubling them
-            file_filters = f"source eq '{state.selected_files[0].replace(chr(39), chr(39)*2)}'"
-            filter_parts.append(f"({file_filters})")
-            logger.info(f"Adding file filter for summary: {state.selected_files[0]}")
-        
-        # Combine filters if present
-        if filter_parts:
-            filter_expression = " and ".join(filter_parts)
-            logger.info(f"Combined filter expression for summary: {filter_expression}")
-        else:
-            logger.info("No filters applied for summary - searching across all documents")
-        
-        try:
-            # For summaries, retrieve more documents (100 instead of 25)
-            # and configure search for broader coverage
-            state.documents = retriever_tool.run({
-                "query": state.question,
-                "k": 100,  # Retrieve more documents for comprehensive summaries
-                "filters": filter_expression,
-                "queryType": "simple"  # Use simple query type for broader coverage
-            })
-            
-            logger.info(f"Retrieved {len(state.documents)} documents for summary")
-            
-            # Log the first few document sources for debugging
-            if state.documents:
-                sources = [doc.metadata.get('source', 'unknown') for doc in state.documents[:5]]
-                logger.info(f"First few document sources for summary: {sources}")
-            
-            if not state.documents:
-                state.response = "I could not find any relevant documents in the database to summarize."
-                state.should_stop = True
-                return state
-        except Exception as e:
-            logger.error(f"Error calling retriever tool for summary: {str(e)}")
-            state.documents = []
-            state.response = "An error occurred while retrieving documents for summarization."
-            state.should_stop = True
-            return state
-    except Exception as e:
-        logger.error(f"Error retrieving documents for summary: {str(e)}")
-        state.documents = []
-        state.response = "An error occurred while retrieving documents for summarization."
-        state.should_stop = True
-        return state
-    return state
-
-def process_documents_for_summary(state: AgentState) -> AgentState:
-    """
-    Process and organize documents specifically for summarization.
-    This function groups documents by source and prepares them for effective summarization.
-    """
-    logger.info("Processing documents for summary")
-    documents = state.documents
-    if not documents:
-        logger.info("No documents to process for summary, skipping processing step")
-        return state
-    
-    try:
-        # Group documents by source
-        documents_by_source = {}
-        for doc in documents:
-            source = doc.metadata.get('source', 'Unknown')
-            if source not in documents_by_source:
-                documents_by_source[source] = []
-            documents_by_source[source].append(doc)
-        
-        logger.info(f"Grouped documents into {len(documents_by_source)} sources")
-        
-        # Prepare processed documents with structure
-        processed_documents = []
-        for source, docs in documents_by_source.items():
-            # Sort documents by page/chunk number if available
-            sorted_docs = sorted(docs, key=lambda d: d.metadata.get('chunk', 0))
-            
-            # Create a structured document with source information
-            source_title = source.split('/')[-1] if '/' in source else source
-            source_content = "\n\n".join([doc.page_content for doc in sorted_docs])
-            
-            # Add structured document to processed list
-            processed_documents.append(Document(
-                page_content=source_content,
-                metadata={
-                    'source': source,
-                    'title': source_title,
-                    'document_count': len(sorted_docs)
-                }
-            ))
-        
-        # Replace original documents with processed ones
-        state.documents = processed_documents
-        logger.info(f"Processed {len(processed_documents)} document groups for summary")
-        
-        return state
-    except Exception as e:
-        logger.error(f"Error processing documents for summary: {str(e)}")
-        # If processing fails, continue with original documents
-        logger.info("Continuing with original documents")
-        return state
-
-def generate_summary(state: AgentState) -> AgentState:
-    """
-    Generate a comprehensive summary from the processed documents.
-    This function is specifically designed for creating structured, informative summaries.
-    """
-    logger.info("Generating document summary")
-    
-    # Prepare context with document metadata for better structure
-    context_parts = []
-    for i, doc in enumerate(state.documents):
-        # Include document metadata if available
-        source = doc.metadata.get('source', 'Unknown document')
-        title = doc.metadata.get('title', f'Document {i+1}')
-        doc_count = doc.metadata.get('document_count', 1)
-        
-        # Format with metadata
-        context_parts.append(f"## {title}\nSource: {source}\nContains content from {doc_count} document sections\n\n{doc.page_content}")
-    
-    context = "\n\n".join(context_parts)
-    logger.info(f"Using {len(state.documents)} document groups with total context length: {len(context)}")
-    
-    # Use the specialized summary prompt
-    _input = (
-        RunnableLambda(lambda x: {
-            "context": context,
-            "question": x.question
-        })
-        | SUMMARY_PROMPT
-        | llm_41_mini
-        | StrOutputParser()
-    )
-    
-    response = _input.invoke(state)
-    cleaned_response = response.replace("<answer>", "").replace("</answer>", "").strip()
-    
-    # Check if the response indicates insufficient information
-    if "I don't have enough information" in cleaned_response:
-        state.response = "I couldn't find enough information in my knowledge base to create a comprehensive summary. Could you please specify which documents you'd like me to summarize?"
-    else:
-        state.response = cleaned_response
-    
-    return state
-
 # Build the Langgraph
 builder = StateGraph(AgentState)
 
-builder.add_node("detect_summary", detect_summary_intent)
 builder.add_node("detect_casual", detect_casual_talk)
-builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("condense", condense_question)
 builder.add_node("check_customer", check_customer_specification)
 builder.add_node("retrieve", retrieve_documents)
 builder.add_node("rerank", rerank_documents)
 builder.add_node("generate", generate_response)
+builder.add_node("respond_casual", respond_to_casual)
 builder.add_node("update_history", update_history)
-builder.add_node("retrieve_for_summary", retrieve_documents_for_summary)
-builder.add_node("process_for_summary", process_documents_for_summary)
-builder.add_node("generate_summary", generate_summary)
 
-builder.add_conditional_edges(
-    "detect_summary",
-    lambda s: "detect_casual" if not s.is_summary_request else "condense"
-)
+def decide_next_step_after_casual_detection(state: AgentState):
+    if state.needs_casual_response:
+        return "respond_casual"
+    return "condense"
+
 builder.add_conditional_edges(
     "detect_casual",
-    lambda s: "respond_casual" if s.needs_casual_response else "condense"
-)
-builder.add_edge("respond_casual", "update_history")
-builder.add_edge("condense", "check_customer")
-builder.add_conditional_edges(
-    "check_customer",
-    lambda s: "update_history" if s.should_stop else (
-        "retrieve_for_summary" if s.is_summary_request else "retrieve"
-    )
-)
-builder.add_conditional_edges(
-    "retrieve",
-    lambda s: "update_history" if s.should_stop else "rerank"
-)
-builder.add_edge("rerank", "generate")
-builder.add_edge("generate", "update_history")
-builder.add_conditional_edges(
-    "retrieve_for_summary",
-    lambda s: "update_history" if s.should_stop else "process_for_summary"
-)
-builder.add_edge("process_for_summary", "generate_summary")
-builder.add_edge("generate_summary", "update_history")
-builder.add_conditional_edges(
-    "update_history",
-    lambda s: END if s.should_stop else "detect_summary"
+    decide_next_step_after_casual_detection,
+    {
+        "respond_casual": "respond_casual",
+        "condense": "condense"
+    }
 )
 
-builder.set_entry_point("detect_summary")
+builder.add_edge("respond_casual", "update_history")
+builder.add_edge("condense", "check_customer")
+builder.add_edge("check_customer", "retrieve")
+builder.add_edge("retrieve", "rerank")
+builder.add_edge("rerank", "generate")
+builder.add_edge("generate", "update_history")
+builder.add_edge("update_history", END)
+
+builder.set_entry_point("detect_casual")
 agent = builder.compile()
 
 async def run_agent(question: str, chat_history: List[Message], selected_files: List[str] = None) -> Dict[str, Any]:

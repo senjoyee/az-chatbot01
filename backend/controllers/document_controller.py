@@ -14,10 +14,11 @@ from models.enums import ProcessingStatus
 from services.document_service import DocumentService
 from services.azure_storage import AzureStorageManager
 from services.file_processor import FileProcessor
-from services.agent import run_agent
-from config.prompts import MINDMAP_TEMPLATE, SUMMARY_TEMPLATE
-from langchain_openai import AzureChatOpenAI
-from config.settings import AZURE_OPENAI_ENDPOINT_SC, AZURE_OPENAI_API_KEY_SC
+from services.agent import run_agent # Keep if used elsewhere, otherwise can be removed if generate_mindmap also changes
+from services.document_processing_service import generate_single_document_summary # Import new service
+from config.prompts import MINDMAP_TEMPLATE # SUMMARY_TEMPLATE is now used within the service
+# langchain_openai and settings for LLM are no longer directly used here for summary
+
 
 logger = logging.getLogger(__name__)
 
@@ -74,27 +75,18 @@ class DocumentController:
                 raise HTTPException(status_code=400, detail=f"Unsupported file type: {ext}")
             document_content = ' '.join([el.text for el in elements if hasattr(el, 'text') and el.text.strip()])
             
-            # Create and send summary prompt
-            summary_prompt = SUMMARY_TEMPLATE.format(context=document_content)
-            llm = AzureChatOpenAI(
-                azure_deployment="gpt-4.1-nano",
-                openai_api_version="2024-12-01-preview",
-                azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
-                api_key=AZURE_OPENAI_API_KEY_SC,
-                temperature=0.3
+            # Call the document processing service to generate the summary
+            summary_result = await generate_single_document_summary(
+                document_content=document_content, 
+                file_name_for_logging=filename
             )
-            summary_response = await llm.apredict(summary_prompt)
+
+            if "error" in summary_result:
+                logger.error(f"Error from summarization service for {filename}: {summary_result['error']}")
+                raise HTTPException(status_code=500, detail=summary_result['error'])
             
-            # Extract content between <answer> tags if present
-            start_idx = summary_response.find('<answer>')
-            end_idx = summary_response.find('</answer>')
-            if start_idx >= 0 and end_idx > start_idx:
-                summary = summary_response[start_idx+len('<answer>'):end_idx].strip()
-            else:
-                summary = summary_response.strip()
-            
-            logger.info(f"Generated summary for {filename}")
-            return {"summary": summary}
+            logger.info(f"Successfully generated summary for {filename} via service.")
+            return {"summary": summary_result.get("summary")}
         except Exception as e:
             logger.error(f"Error generating summary for {filename}: {str(e)}")
             raise HTTPException(status_code=500, detail=f"Failed to generate summary: {str(e)}")
