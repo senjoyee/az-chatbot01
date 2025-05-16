@@ -2,6 +2,7 @@ import logging
 from typing import List, Optional, Dict, Any
 
 from langchain_openai import AzureChatOpenAI
+from langchain.prompts import PromptTemplate # Ensure PromptTemplate is imported
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 
@@ -44,7 +45,7 @@ async def generate_single_document_summary(document_content: str, file_name_for_
     )
     
     try:
-        summary = await summary_chain.ainvoke({"text": document_content})
+        summary = await summary_chain.ainvoke({"context": document_content})
         logger.info(f"Successfully generated summary for document: {file_name_for_logging}")
         return {"summary": summary}
     except Exception as e:
