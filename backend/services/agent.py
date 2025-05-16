@@ -10,7 +10,7 @@ from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
 
 from .tools import RetrieverTool
-from utils.helpers import is_casual_conversation
+from utils.helpers import is_casual_conversation, escape_odata_filter_value
 
 from config.settings import (
     AZURE_OPENAI_API_KEY,
@@ -162,16 +162,27 @@ def retrieve_documents(state: AgentState) -> AgentState:
                 logger.info(f"Large number of files selected ({len(state.selected_files)}). Treating as 'select all' - no file filter will be applied.")
                 # Don't add file filter - but customer filter may still be applied if detected
             else:
-                selected_files = state.selected_files
+                selected_files_to_filter = state.selected_files
                 
-                if len(selected_files) > MAX_FILES_IN_FILTER:
-                    logger.warning(f"Too many files selected ({len(selected_files)}). Limiting to {MAX_FILES_IN_FILTER} files.")
-                    selected_files = selected_files[:MAX_FILES_IN_FILTER]
+                if len(selected_files_to_filter) > MAX_FILES_IN_FILTER:
+                    logger.warning(f"Too many files selected ({len(selected_files_to_filter)}). Limiting to {MAX_FILES_IN_FILTER} files.")
+                    selected_files_to_filter = selected_files_to_filter[:MAX_FILES_IN_FILTER]
                 
-                # Escape single quotes by doubling them
-                file_filters = " or ".join([f"source eq '{file.replace(chr(39), chr(39)*2)}'" for file in selected_files])
-                filter_parts.append(f"({file_filters})")
-                logger.info(f"Adding file filter for {len(selected_files)} files")
+                # If, after applying limits, there are files to filter by
+                if selected_files_to_filter:
+                    # Escape each filename for OData.
+                    # escape_odata_filter_value handles single quotes (e.g., ' becomes '') and other necessary OData special characters.
+                    escaped_filenames = [escape_odata_filter_value(f) for f in selected_files_to_filter]
+                    
+                    # The valueList for search.in is a single string literal, with values separated by the chosen delimiter.
+                    # We will use a simple comma (',') as the delimiter within this string.
+                    filenames_str_for_search_in = ",".join(escaped_filenames)
+                    
+                    # Construct the filter expression using search.in.
+                    # The third argument to search.in ('{delimiter}') specifies the delimiter used within the valueList string.
+                    file_filter_expression = f"search.in(source, '{filenames_str_for_search_in}', ',')"
+                    filter_parts.append(file_filter_expression) # Append directly; no extra parentheses needed around search.in itself.
+                    logger.info(f"Adding file filter for {len(selected_files_to_filter)} files using search.in: {file_filter_expression}")
             
         # Combine filters if present
         if filter_parts:
