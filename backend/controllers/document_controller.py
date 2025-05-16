@@ -16,7 +16,9 @@ from services.azure_storage import AzureStorageManager
 from services.file_processor import FileProcessor
 from services.agent import run_agent # Keep if used elsewhere, otherwise can be removed if generate_mindmap also changes
 from services.document_processing_service import generate_single_document_summary # Import new service
-from config.prompts import MINDMAP_TEMPLATE # SUMMARY_TEMPLATE is now used within the service
+from config.prompts import MINDMAP_TEMPLATE
+from langchain_openai import AzureChatOpenAI # Added for mindmap generation
+from config.settings import AZURE_OPENAI_API_KEY_SC, AZURE_OPENAI_ENDPOINT_SC # Added for mindmap generation # SUMMARY_TEMPLATE is now used within the service
 # langchain_openai and settings for LLM are no longer directly used here for summary
 
 
