@@ -85,9 +85,9 @@ jobs:
           echo "${{ env.AZURE_CONTAINER_REGISTRY }}.azurecr.io/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.unique_tag }}" > deployment-info/image.txt
 
       - name: Upload Deployment Info
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
-          name: deployment-info
+          name: backend-deployment-info
           path: deployment-info/
           retention-days: 30
 
