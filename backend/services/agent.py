@@ -215,50 +215,20 @@ def generate_response(state: AgentState) -> AgentState:
     TOP_K_DOCUMENTS = 15
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     
-    # Check if this is a summary request
-    is_summary = is_summary_request(state.question)
-    logger.info(f"Request identified as summary request: {is_summary}")
-    
-    # Prepare context differently based on request type
-    if is_summary:
-        # For summaries, include document metadata to provide better structure
-        context_parts = []
-        for i, doc in enumerate(top_documents):
-            # Include document metadata if available
-            source = doc.metadata.get('source', 'Unknown document')
-            title = doc.metadata.get('title', f'Document {i+1}')
-            
-            # Format with metadata
-            context_parts.append(f"## {title}\nSource: {source}\n\n{doc.page_content}")
-        
-        context = "\n\n".join(context_parts)
-    else:
-        # For regular questions, use the standard approach
-        context = "\n\n".join(doc.page_content for doc in top_documents)
+    # For regular questions, use the standard approach
+    context = "\n\n".join(doc.page_content for doc in top_documents)
     
     logger.info(f"Using {len(top_documents)} documents with total context length: {len(context)}")
 
-    # Use different prompts based on request type
-    if is_summary:
-        _input = (
-            RunnableLambda(lambda x: {
-                "context": context,
-                "question": x.question
-            })
-            | SUMMARY_PROMPT  # Use the specialized summary prompt
-            | llm_41_mini
-            | StrOutputParser()
-        )
-    else:
-        _input = (
-            RunnableLambda(lambda x: {
-                "context": context,
-                "question": x.question
-            })
-            | ANSWER_PROMPT
-            | llm_41_mini
-            | StrOutputParser()
-        )
+    _input = (
+        RunnableLambda(lambda x: {
+            "context": context,
+            "question": x.question
+        })
+        | ANSWER_PROMPT
+        | llm_41_mini
+        | StrOutputParser()
+    )
     
     response = _input.invoke(state)
     cleaned_response = response.replace("<answer>", "").replace("</answer>", "").strip()
