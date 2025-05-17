@@ -1,32 +1,19 @@
 import logging
 from typing import List, Dict, Any
 
-from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, END
-from langchain_openai import AzureChatOpenAI
-from config.ai_models import llm_conversation_agent
-from langchain.prompts import PromptTemplate
+from config.ai_models import llm_41_mini, llm_41_nano
 from langchain.schema import StrOutputParser
-from langchain_core.documents import Document
 
 from .tools import RetrieverTool
 from utils.helpers import is_casual_conversation, escape_odata_filter_value
-
-from config.settings import (
-    AZURE_OPENAI_API_KEY,
-    AZURE_OPENAI_ENDPOINT,
-    AZURE_OPENAI_API_KEY_SC,
-    AZURE_OPENAI_ENDPOINT_SC
-)
 
 from config.prompts import (
     CONDENSE_QUESTION_PROMPT,
     ANSWER_PROMPT,
     CONVERSATION_PROMPT
 )
-
-from config.azure_search import vector_store
 from models.schemas import Message, AgentState
 
 logger = logging.getLogger(__name__)
@@ -64,7 +51,7 @@ def condense_question(state: AgentState) -> AgentState:
             "question": x.question
         })
         | CONDENSE_QUESTION_PROMPT
-        | llm_41_mini
+        | llm_41_nano.with_config(temperature=0.3)
         | StrOutputParser()
     )
     result = _input.invoke(state)
@@ -204,7 +191,7 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm_41_mini
+        | llm_41_mini_with_config(temperature=0.3)
         | StrOutputParser()
     )
     
@@ -231,11 +218,11 @@ def update_history(state: AgentState) -> AgentState:
     return state
 
 def detect_casual_talk(state: AgentState) -> AgentState:
-    state.needs_casual_response = is_casual_conversation(state.question, llm_41_mini)
+    state.needs_casual_response = is_casual_conversation(state.question, llm_41_mini.with_config(temperature=0.1))
     return state
 
 def respond_to_casual(state: AgentState) -> AgentState:
-    state.response = llm_41_mini.invoke(
+    state.response = llm_41_mini.with_config(temperature=0.3).invoke(
         CONVERSATION_PROMPT.format(
             message=state.question,
             history=format_chat_history(state.chat_history)

@@ -1,18 +1,15 @@
 import logging
-from typing import List, Optional, Dict, Any
+from typing import Dict, Any
 
-from langchain_openai import AzureChatOpenAI
 from langchain.prompts import PromptTemplate # Ensure PromptTemplate is imported
 from langchain.schema import StrOutputParser
-from langchain_core.documents import Document
 
-from config.settings import AZURE_OPENAI_API_KEY_SC, AZURE_OPENAI_ENDPOINT_SC
 from config.prompts import SUMMARY_PROMPT
 
 logger = logging.getLogger(__name__)
 
 # Initialize LLM for summarization
-from config.ai_models import llm_summarizer
+from config.ai_models import llm_41_nano
 
 async def generate_single_document_summary(document_content: str, file_name_for_logging: str = "Unknown File") -> Dict[str, Any]:
     """
@@ -34,7 +31,7 @@ async def generate_single_document_summary(document_content: str, file_name_for_
     
     summary_chain = (
         summary_prompt_template
-        | llm_summarizer 
+        | llm_41_nano.with_config(temperature=0.3) 
         | StrOutputParser()
     )
     

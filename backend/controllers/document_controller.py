@@ -9,18 +9,14 @@ from unstructured.partition.docx import partition_docx
 from unstructured.partition.xlsx import partition_xlsx
 from unstructured.partition.pptx import partition_pptx
 
-from models.schemas import BlobEvent, DocumentIn, FileProcessingStatus, Message, Conversation
+from models.schemas import BlobEvent, FileProcessingStatus
 from models.enums import ProcessingStatus
 from services.document_service import DocumentService
 from services.azure_storage import AzureStorageManager
 from services.file_processor import FileProcessor
-from services.agent import run_agent # Keep if used elsewhere, otherwise can be removed if generate_mindmap also changes
 from services.document_processing_service import generate_single_document_summary # Import new service
 from config.prompts import MINDMAP_TEMPLATE
-from config.ai_models import llm_mindmap
-from config.settings import AZURE_OPENAI_API_KEY_SC, AZURE_OPENAI_ENDPOINT_SC # Added for mindmap generation # SUMMARY_TEMPLATE is now used within the service
-# langchain_openai and settings for LLM are no longer directly used here for summary
-
+from config.ai_models import llm_41_nano
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +115,7 @@ class DocumentController:
             mindmap_prompt = MINDMAP_TEMPLATE.format(document_content=document_content)
             
             # Generate the mind map via direct AzureChatOpenAI call
-            mindmap_response = await llm_mindmap.apredict(mindmap_prompt)
+            mindmap_response = await llm_41_nano.with_config(temperature=0.3).apredict(mindmap_prompt)
             
             # Extract the JSON from the response
             try:
