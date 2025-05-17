@@ -17,7 +17,7 @@ from services.file_processor import FileProcessor
 from services.agent import run_agent # Keep if used elsewhere, otherwise can be removed if generate_mindmap also changes
 from services.document_processing_service import generate_single_document_summary # Import new service
 from config.prompts import MINDMAP_TEMPLATE
-from langchain_openai import AzureChatOpenAI # Added for mindmap generation
+from config.ai_models import llm_mindmap
 from config.settings import AZURE_OPENAI_API_KEY_SC, AZURE_OPENAI_ENDPOINT_SC # Added for mindmap generation # SUMMARY_TEMPLATE is now used within the service
 # langchain_openai and settings for LLM are no longer directly used here for summary
 
@@ -119,14 +119,7 @@ class DocumentController:
             mindmap_prompt = MINDMAP_TEMPLATE.format(document_content=document_content)
             
             # Generate the mind map via direct AzureChatOpenAI call
-            llm = AzureChatOpenAI(
-                azure_deployment="gpt-4.1-nano",
-                openai_api_version="2024-12-01-preview",
-                azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
-                api_key=AZURE_OPENAI_API_KEY_SC,
-                temperature=0.3
-            )
-            mindmap_response = await llm.apredict(mindmap_prompt)
+            mindmap_response = await llm_mindmap.apredict(mindmap_prompt)
             
             # Extract the JSON from the response
             try:

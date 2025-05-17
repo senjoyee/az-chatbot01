@@ -5,6 +5,7 @@ from langchain_core.messages import HumanMessage, AIMessage
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import StateGraph, END
 from langchain_openai import AzureChatOpenAI
+from config.ai_models import llm_conversation_agent
 from langchain.prompts import PromptTemplate
 from langchain.schema import StrOutputParser
 from langchain_core.documents import Document
@@ -34,29 +35,6 @@ logger = logging.getLogger(__name__)
 retriever_tool = RetrieverTool()
 
 # Initialize the language models
-llm_4o_mini = AzureChatOpenAI(
-    azure_deployment="gpt-4o-mini",
-    openai_api_version="2023-03-15-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,
-    api_key=AZURE_OPENAI_API_KEY,
-    temperature=0.0,
-)
-
-llm_o3_mini = AzureChatOpenAI(
-    azure_deployment="o3-mini",
-    openai_api_version="2024-12-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT,    
-    api_key=AZURE_OPENAI_API_KEY,
-    reasoning_effort="low"
-)
-
-llm_41_mini = AzureChatOpenAI(
-    azure_deployment="gpt-4.1-mini",
-    openai_api_version="2024-12-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,    
-    api_key=AZURE_OPENAI_API_KEY_SC,
-    temperature=0.3
-)
 
 def format_chat_history(chat_history: List[Message]) -> str:
     buffer = []

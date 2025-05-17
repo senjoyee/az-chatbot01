@@ -12,14 +12,8 @@ logger = logging.getLogger(__name__)
 class Contextualizer:
     def __init__(self):
         logger.debug("Initializing AzureChatOpenAI...")
-        self.llm = AzureChatOpenAI(
-            azure_deployment="gpt-4o-mini",
-            openai_api_version="2023-03-15-preview",
-            azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-            api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-            temperature=0.0,
-            streaming=False  # Ensure streaming is disabled for async calls
-        )
+        from config.ai_models import llm_contextualizer
+        self.llm = llm_contextualizer
         logger.debug("AzureChatOpenAI initialized successfully.")
 
         # Define the prompt template for context generation using message roles

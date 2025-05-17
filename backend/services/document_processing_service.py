@@ -12,13 +12,7 @@ from config.prompts import SUMMARY_PROMPT
 logger = logging.getLogger(__name__)
 
 # Initialize LLM for summarization
-llm_summarizer = AzureChatOpenAI(
-    azure_deployment="gpt-4.1-mini",  # Or your preferred model for summarization
-    openai_api_version="2024-12-01-preview",
-    azure_endpoint=AZURE_OPENAI_ENDPOINT_SC,
-    api_key=AZURE_OPENAI_API_KEY_SC,
-    temperature=0.3
-)
+from config.ai_models import llm_summarizer
 
 async def generate_single_document_summary(document_content: str, file_name_for_logging: str = "Unknown File") -> Dict[str, Any]:
     """
