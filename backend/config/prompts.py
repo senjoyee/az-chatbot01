@@ -135,7 +135,7 @@ ANSWER_TEMPLATE = """
           ```python
           def get_user_config({{user_id}}):
               # Retrieve configuration from database
-              return db.query(f"SELECT * FROM configs WHERE id = {{user_id}}")
+              return db.query(f"SELECT * FROM configs WHERE id = {{{{user_id}}}}")
           ```
   •   **Tabular Data**:
       *   If <documents> contain structured data best presented as a table, use Markdown tables.
