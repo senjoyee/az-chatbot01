@@ -191,7 +191,7 @@ def generate_response(state: AgentState) -> AgentState:
             "question": x.question
         })
         | ANSWER_PROMPT
-        | llm_41_mini.with_config(temperature=0.3)
+        | llm_41_mini.with_config(temperature=0.1)
         | StrOutputParser()
     )
     
