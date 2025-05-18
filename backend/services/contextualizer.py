@@ -5,6 +5,7 @@ from typing import List
 from langchain_openai import AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
 from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from config.ai_models import llm_41_nano
 
 # Initialize logging
 logger = logging.getLogger(__name__)
