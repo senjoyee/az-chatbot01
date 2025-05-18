@@ -133,9 +133,9 @@ ANSWER_TEMPLATE = """
       *   Specify the language immediately after the opening backticks if known or inferable from the document (e.g., ```python, ```json, ```bash, ```xml). If unknown or mixed, use ```plaintext.
       *   Example (illustrative, not from <documents> unless specified):
           ```python
-          def get_user_config(user_id):
+          def get_user_config({{user_id}}):
               # Retrieve configuration from database
-              return db.query(f"SELECT * FROM configs WHERE id = {user_id}")
+              return db.query(f"SELECT * FROM configs WHERE id = {{user_id}}")
           ```
   •   **Tabular Data**:
       *   If <documents> contain structured data best presented as a table, use Markdown tables.
