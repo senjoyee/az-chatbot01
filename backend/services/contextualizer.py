@@ -1,10 +1,8 @@
-import os
 import logging
 import asyncio
 from typing import List
-from langchain_openai import AzureChatOpenAI
 from langchain.prompts import ChatPromptTemplate
-from langchain.schema import AIMessage, HumanMessage, SystemMessage
+from langchain.schema import StrOutputParser
 from config.ai_models import llm_41_nano
 
 # Initialize logging
@@ -13,7 +11,6 @@ logger = logging.getLogger(__name__)
 class Contextualizer:
     def __init__(self):
         logger.debug("Initializing AzureChatOpenAI...")
-        from config.ai_models import llm_41_nano
         self.llm = llm_41_nano
         logger.debug("AzureChatOpenAI initialized successfully.")
 
