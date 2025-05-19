@@ -177,7 +177,7 @@ def retrieve_documents(state: AgentState) -> AgentState:
 
 def generate_response(state: AgentState) -> AgentState:
     logger.info("Generating response")
-    TOP_K_DOCUMENTS = 15
+    TOP_K_DOCUMENTS = 30
     top_documents = state.documents[:TOP_K_DOCUMENTS]
     
     # For regular questions, use the standard approach
